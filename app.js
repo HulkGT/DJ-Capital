@@ -601,7 +601,7 @@ function editAcc(id){const a=id?accOf(id):{name:'',type:'bank',note:''};
 function vMehr(){
   return '<h2>Mehr</h2>'
   +'<section class="group"><h3>Von Hand eintragen</h3><p class="hint">Für Barzahlungen oder alles, was nicht im Kontoauszug steht.</p><div class="form"><button data-act="addManual" data-v="expense">+ Ausgabe</button><button data-act="addManual" data-v="income">+ Einnahme</button></div></section>'
-  +'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
+  +bkSection()+'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
   +'<section class="group"><h3>Jahresbericht</h3><p class="hint">Alle Zahlen eines Jahres als Datei, zum Ausdrucken oder für den Steuerberater.</p><button data-act="report">Jahresbericht erstellen</button></section>'
   +'<section class="group"><div class="h2row"><h3>Erinnerungen</h3><button class="small" data-act="toggleRemind">'+(S.settings&&S.settings.remind===false?'Auf Übersicht zeigen':'Auf Übersicht ausblenden')+'</button></div><p class="hint">Kündigungsfristen, fehlende Mieten und geplante Modernisierungen erkennt die App selbst. Hier legst du eigene Termine an, zum Beispiel Versicherungen oder Komunalna naknada.</p><div class="list">'+(S.reminders||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>'<div class="item static"><span class="it"><strong>'+esc(x.title)+'</strong><small>'+dfmt(x.date)+(x.repeat==='yearly'?' · jährlich':x.repeat==='monthly'?' · monatlich':'')+'</small></span><button class="ic" data-act="delRem" data-id="'+x.id+'" aria-label="Erinnerung löschen">×</button></div>').join('')+'</div><button data-act="addRem">+ Erinnerung</button></section>'
   +'<section class="group"><h3>Automatische Regeln</h3><p class="hint">Steht das Stichwort im Umsatz, wird er beim Hochladen automatisch einsortiert.</p><div class="list">'+S.rules.map((r,i)=>'<div class="item static"><span class="it"><strong>'+esc(r.keyword)+'</strong><small>'+esc(r.category)+(r.propertyId?' · '+esc((propOf(r.propertyId)||{}).name||''):'')+'</small></span><button class="ic" data-act="delRule" data-i="'+i+'" aria-label="Regel löschen">×</button></div>').join('')+'</div>'
@@ -766,7 +766,9 @@ function showImport(){if(imp.pdf)return showPdfImport();
 function dedupeExcel(tx){const m=tx.forMonth||monthOf(tx.date);const i=S.txs.findIndex(x=>x.src==='excel'&&x.type==='rent'&&x.unitId===tx.unitId&&x.forMonth===m);if(i>=0)S.txs.splice(i,1)}
 function doImport(){
   const acc=$('#f-iacc').value;ui.lastAcc=acc;const list=impList(),ex=keyCounts(),seen={};let added=0,dup=0,auto=0;
+  const bused=new Set();
   for(const t of list){const k=txKey(t);seen[k]=(seen[k]||0)+1;if((ex[k]||0)>=seen[k]){dup++;continue}
+    {const m=typeof bkFuzzy==='function'&&bkFuzzy(acc,t.amount,t.date,bused,y=>!!y.ebid&&!y.pdfMatched);if(m){bused.add(m.id);m.pdfMatched=1;dup++;continue}}
     const tx={id:uid(),key:k,date:t.date,amount:t.amount,name:t.name,iban:t.iban,purpose:t.purpose,type:'open',unitId:'',propertyId:'',category:'',forMonth:'',accountId:acc};
     if(autoAssign2(tx)){auto++;if(tx.type==='rent')dedupeExcel(tx)}S.txs.push(tx);added++}
   const sb=$('#f-setbal');if(imp.pdf&&sb&&sb.checked&&acc&&imp.pdf.end){const ac=accOf(acc),d=imp.pdf.end.date||todayISO();ac.history=(ac.history||[]).filter(h=>h.date!==d);ac.history.push({date:d,value:imp.pdf.end.value})}
@@ -1040,3 +1042,154 @@ function runGo(){const g=GO;GO=null;if(!g)return;
     else if(g==='beleg')modal('<h3>Beleg fotografieren</h3><p class="hint">Foto speichern und Ausgabe eintragen</p><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="pickReceipt">Kamera öffnen</button></div>');
   },80)}
 I18N.push(['Datei auswählen','Choose file','Odaberi datoteku'],['Kamera öffnen','Open camera','Otvori kameru']);
+
+/* ---------- Bankverbindung (Enable Banking über eigenen Cloudflare-Vermittler) ---------- */
+const BK_CB=(()=>{try{const q=new URLSearchParams(location.search);if(q.get('code')||q.get('error')){const r={code:q.get('code'),state:q.get('state'),error:q.get('error'),desc:q.get('error_description')};history.replaceState(null,'',location.pathname+location.hash);return r}}catch(e){}return null})();
+let bkBusy=false;
+const bk=()=>{S.bank=S.bank||{url:'',key:'',conns:[],lastFetch:0};S.bank.conns=S.bank.conns||[];return S.bank};
+const bkReady=()=>{const b=bk();return !!(b.url&&b.key)};
+const bkRedirect=()=>location.origin+location.pathname.replace(/index\.html$/,'');
+async function bkApi(path,opt){const b=bk();let r;
+  try{r=await fetch(b.url.replace(/\/+$/,'')+path,Object.assign({},opt||{},{headers:{'X-DJC-Key':b.key,'Content-Type':'application/json'}}))}catch(e){throw {code:'NETWORK'}}
+  let j={};try{j=await r.json()}catch(e){}
+  if(!r.ok)throw {code:j.error||('HTTP_'+r.status),msg:j.message||'',status:r.status};return j}
+function bkErrText(e){const c=e&&e.code;
+  if(c==='NETWORK')return 'Der Vermittler ist nicht erreichbar. Prüfe die Adresse und die Internetverbindung.';
+  if(c==='WRONG_KEY')return 'Der Zugangsschlüssel passt nicht zu dem bei Cloudflare.';
+  if(c==='FORBIDDEN_ORIGIN')return 'Der Vermittler erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).';
+  if(c==='NOT_CONFIGURED')return 'Beim Vermittler fehlen EB_APP_ID, EB_KEY oder ACCESS_KEY.';
+  if(c==='EXPIRED_SESSION')return 'Die Freigabe der Bank ist abgelaufen. Bitte neu verbinden.';
+  return 'Fehler von der Bank-Schnittstelle'+(c?' ('+c+')':'')+'.'}
+function bkSection(){const b=bk();const T=todayISO();
+  const conns=b.conns.map((c,i)=>{const until=(c.valid_until||'').slice(0,10),d=until?daysTo(until):999,exp=c.err==='expired'||d<0;
+    return '<div class="erow"><span><b>'+esc(c.aspsp.name)+'</b><small>'+(exp?'Abgelaufen, bitte neu verbinden':'Verbunden bis '+dfmt(until))+' · <span>'+c.accounts.length+(c.accounts.length===1?' Konto':' Konten')+'</span></small></span><span class="form" style="margin:0">'+(exp||d<=14?'<button class="small primary" data-act="bkRenew" data-i="'+i+'">Neu verbinden</button>':'')+'<button class="small" data-act="bkRemove" data-i="'+i+'" aria-label="Entfernen">×</button></span></div>'}).join('');
+  return '<section class="group"><h3>Bankverbindung</h3>'
+    +(bkReady()?(b.conns.length?'<div class="elist">'+conns+'</div>':'<p class="hint">Noch keine Bank verbunden.</p>')
+      +'<div class="form"><button class="primary" data-act="bkFetch">Umsätze abrufen</button><button data-act="bkConnect">+ Bank verbinden</button></div>'
+      +(b.lastFetch?'<p class="hint">Zuletzt abgerufen: '+dfmt(new Date(b.lastFetch).toISOString().slice(0,10))+' '+new Date(b.lastFetch).toTimeString().slice(0,5)+'</p>':'')
+      +'<details class="cols"'+(b.conns.length?'':' open')+'><summary>Einstellungen</summary>'+bkSetupForm()+'</details>'
+      :'<p class="hint">Holt Umsätze und Kontostände direkt von der Bank. Dafür brauchst du einmalig ein kostenloses Konto bei Enable Banking und einen eigenen Vermittler bei Cloudflare.</p>'+bkSetupForm())
+    +'</section>'}
+function bkSetupForm(){const b=bk();return '<label>Adresse des Vermittlers<input id="f-bkurl" value="'+esc(b.url||'')+'" placeholder="https://djc-bank.….workers.dev" inputmode="url"></label>'
+  +'<label>Zugangsschlüssel<input id="f-bkkey" value="'+esc(b.key||'')+'" autocomplete="off" spellcheck="false"></label>'
+  +'<div class="form"><button data-act="bkGenKey">Schlüssel erzeugen</button><button data-act="bkCopyKey">Schlüssel kopieren</button><button class="primary" data-act="bkSave">Speichern & testen</button></div>'
+  +'<p class="hint">Den Zugangsschlüssel trägst du bei Cloudflare als ACCESS_KEY ein. Er steht nur hier in der App und in deinem Backup.</p>'}
+function bkGenKey(){const a=new Uint8Array(24);crypto.getRandomValues(a);return Array.from(a,x=>x.toString(16).padStart(2,'0')).join('')}
+async function bkSaveSetup(){const b=bk();b.url=$('#f-bkurl').value.trim().replace(/\/+$/,'');b.key=$('#f-bkkey').value.trim();
+  if(b.url&&!/^https:\/\//.test(b.url)&&!/^http:\/\/localhost/.test(b.url)){toast('Die Adresse muss mit https:// beginnen.');return}
+  save();render();if(!bkReady()){toast('Gespeichert.');return}
+  try{await bkApi('/ping');toast('Verbindung zum Vermittler klappt.')}catch(e){toast(bkErrText(e))}}
+const BK_COUNTRIES=[['DE','Deutschland'],['HR','Kroatien'],['AT','Österreich']];
+function bkConnectDlg(country){country=country||'DE';
+  modal('<div class="mhead"><div><h3>Bank verbinden</h3><small>Du meldest dich gleich direkt bei deiner Bank an.</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
+    +'<label>Land<select id="f-bkc">'+BK_COUNTRIES.map(([v,t])=>'<option value="'+v+'"'+sel(v===country)+'>'+t+'</option>').join('')+'</select></label>'
+    +'<label>Bank suchen<input id="f-bkq" placeholder="z. B. DKB, Santander, Raiffeisen"></label><div id="bklist" class="elist"><p class="hint">Wird geladen …</p></div>');
+  bkLoadList(country)}
+let bkList=[];
+async function bkLoadList(c){const el=$('#bklist');try{const j=await bkApi('/aspsps?country='+c);bkList=j.aspsps||[];bkRenderList()}catch(e){if(el)el.innerHTML='<p class="neg">'+esc(tr(bkErrText(e)))+'</p>'}}
+function bkRenderList(){const el=$('#bklist');if(!el)return;const q=nrm(($('#f-bkq')||{}).value||'');const L=bkList.filter(a=>!q||nrm(a.name).includes(q)).slice(0,40);
+  el.innerHTML=L.length?L.map(a=>'<button class="erow btnrow" data-act="bkStart" data-v="'+esc(a.name)+'" data-c="'+esc(a.country)+'"><span><b>'+esc(a.name)+'</b></span><span>›</span></button>').join(''):'<p class="hint">Keine Bank gefunden.</p>'}
+async function bkStart(name,country){const st=bkGenKey();try{localStorage.setItem('djc-bstate',JSON.stringify({st,name,country,t:Date.now()}))}catch(e){}
+  toast('Weiter zur Bank …');
+  try{const j=await bkApi('/auth',{method:'POST',body:JSON.stringify({name,country,state:st,redirect_url:bkRedirect()})});save();setTimeout(()=>{location.href=j.url},50)}catch(e){toast(bkErrText(e))}}
+async function bkCallback(cb){let st=null;try{st=JSON.parse(localStorage.getItem('djc-bstate')||'null')}catch(e){}
+  if(cb.error){toast('Die Bank hat die Freigabe abgebrochen.');return}
+  if(!st||st.st!==cb.state){toast('Die Rückmeldung der Bank passt nicht zu dieser App. Bitte erneut verbinden.');return}
+  try{localStorage.removeItem('djc-bstate')}catch(e){}
+  if(!bkReady()){toast('Bitte zuerst den Vermittler unter „Mehr“ einrichten.');return}
+  toast('Bank wird verbunden …');
+  let j;try{j=await bkApi('/session',{method:'POST',body:JSON.stringify({code:cb.code})})}catch(e){toast(bkErrText(e));return}
+  const b=bk();const name=(j.aspsp&&j.aspsp.name)||st.name,country=(j.aspsp&&j.aspsp.country)||st.country;
+  const old=b.conns.filter(c=>c.aspsp.name===name&&c.aspsp.country===country);
+  const accounts=(j.accounts||[]).map(a=>{const iban=normIban(a.iban);let acc=iban&&S.accounts.find(x=>normIban(x.iban)===iban);
+    if(!acc){acc={id:uid(),name:name+(a.name?' '+a.name:iban?' …'+iban.slice(-4):''),type:'bank',iban,history:[],note:''};S.accounts.push(acc)}
+    const prev=old.flatMap(c=>c.accounts).find(x=>x.iban&&x.iban===iban);
+    return {uid:a.uid,iban,name:a.name||'',accId:acc.id,last:prev?prev.last:''}});
+  b.conns=b.conns.filter(c=>!old.includes(c));
+  b.conns.push({sid:j.session_id,aspsp:{name,country},valid_until:j.valid_until||'',accounts,err:''});
+  save();render();
+  if(!accounts.length){toast('Verbunden, aber die Bank hat keine Konten geliefert. Ist das Konto bei Enable Banking freigeschaltet (Linked Accounts)?');return}
+  await bkFetch(true)}
+function bkFuzzy(accId,amount,date,used,pred){const d0=Date.parse(date);
+  return S.txs.find(t=>!used.has(t.id)&&pred(t)&&(t.accountId||'')===(accId||'')&&Math.abs(t.amount-amount)<0.005&&Math.abs(Date.parse(t.date)-d0)<=3*864e5)}
+function bkMap(x){const deb=x.credit_debit_indicator==='DBIT';let amt=Math.abs(parseFloat(x.transaction_amount&&x.transaction_amount.amount)||0);if(deb)amt=-amt;
+  const cp=deb?x.creditor:x.debtor,cpa=deb?x.creditor_account:x.debtor_account;
+  const purpose=(Array.isArray(x.remittance_information)?x.remittance_information.join(' '):String(x.remittance_information||'')).replace(/\s+/g,' ').trim();
+  const date=(x.booking_date||x.value_date||x.transaction_date||todayISO()).slice(0,10);
+  const name=((cp&&cp.name)||'').replace(/\s+/g,' ').trim();const iban=normIban(cpa&&cpa.iban);
+  const id='eb:'+(x.entry_reference||x.transaction_id||[date,amt.toFixed(2),name,purpose].join('|'));
+  return {ebid:id,date,amount:Math.round(amt*100)/100,name,iban:/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)?iban:'',purpose}}
+const BK_BAL=['CLBD','ITBD','XPCD','ITAV','CLAV','OPBD','PRCD','FWAV','INFO'];
+async function bkFetch(manual){if(bkBusy||!bkReady())return;const b=bk();if(!b.conns.length){if(manual)toast('Noch keine Bank verbunden.');return}
+  bkBusy=true;if(manual)toast('Umsätze werden abgerufen …');
+  let added=0,auto=0,dup=0,errs=[];const T=todayISO();
+  try{
+    for(const c of b.conns){if(c.err==='expired')continue;
+      for(const a of c.accounts){
+        const from=a.last?new Date(Date.parse(a.last)-5*864e5).toISOString().slice(0,10):new Date(Date.now()-89*864e5).toISOString().slice(0,10);
+        try{
+          const j=await bkApi('/transactions?uid='+encodeURIComponent(a.uid)+'&from='+from);
+          const used=new Set();
+          for(const x of (j.transactions||[])){if(x.status==='PDNG'||x.status==='PNDG')continue;const t=bkMap(x);if(!t.amount)continue;
+            if(S.txs.some(y=>y.ebid===t.ebid)){dup++;continue}
+            const m=bkFuzzy(a.accId,t.amount,t.date,used,y=>!y.ebid);if(m){used.add(m.id);m.ebid=t.ebid;dup++;continue}
+            const tx={id:uid(),key:txKey(t),ebid:t.ebid,src:'bank',date:t.date,amount:t.amount,name:t.name,iban:t.iban,purpose:t.purpose,type:'open',unitId:'',propertyId:'',category:'',forMonth:'',accountId:a.accId};
+            if(autoAssign2(tx)){auto++;if(tx.type==='rent')dedupeExcel(tx)}S.txs.push(tx);added++}
+          try{const bj=await bkApi('/balances?uid='+encodeURIComponent(a.uid));const L=bj.balances||[];const pick=BK_BAL.map(k=>L.find(z=>z.balance_type===k)).find(Boolean)||L[0];
+            if(pick&&pick.balance_amount){const ac=accOf(a.accId);if(ac){const v=Math.round(parseFloat(pick.balance_amount.amount)*100)/100;if(isFinite(v)){ac.history=(ac.history||[]).filter(h=>h.date!==T);ac.history.push({date:T,value:v})}}}}catch(e){}
+          a.last=T;
+        }catch(e){if(e.code==='EXPIRED_SESSION'){c.err='expired'}errs.push(c.aspsp.name+': '+bkErrText(e))}
+      }
+    }
+    b.lastFetch=Date.now();save();render();
+    if(errs.length)toast(errs[0]);
+    else if(added)toast(added+' neue Umsätze von der Bank, davon '+auto+' automatisch zugeordnet.');
+    else if(manual)toast('Keine neuen Umsätze.');
+  }finally{bkBusy=false}}
+function bankAfterBoot(){if(BK_CB&&!bankAfterBoot.done){bankAfterBoot.done=true;bkCallback(BK_CB);return}
+  if(bankAfterBoot.done)return;bankAfterBoot.done=true;
+  if(bkReady()&&bk().conns.length&&Date.now()-(bk().lastFetch||0)>4*3600e3)bkFetch(false)}
+{const _rg=runGo;runGo=function(){_rg();bankAfterBoot()}}
+{const _ri=remindItems;remindItems=function(){const out=_ri();if(S.bank&&S.bank.conns)S.bank.conns.forEach(c=>{const u=(c.valid_until||'').slice(0,10);const d=u?daysTo(u):999;
+  if(c.err==='expired'||d<=14)out.push({date:u||todayISO(),t:'Bankverbindung '+c.aspsp.name,s:c.err==='expired'||d<0?'Abgelaufen, bitte neu verbinden':'Läuft am '+dfmt(u)+' ab, bitte neu verbinden',lvl:c.err==='expired'||d<0?'late':'partial',act:'bank'})});
+  return out.sort((a,b)=>a.date.localeCompare(b.date))}}
+/* Mehrere Fenster (App + Browser nach der Bankanmeldung): neueren Stand übernehmen */
+{const _ds=doSave;doSave=async function(){S._t=Date.now();return _ds()}}
+document.addEventListener('visibilitychange',async()=>{if(document.hidden||!S||locked)return;try{const s=await idbGet(KV,'state');if(s&&s._t&&s._t>(S._t||0)){S=migrate(s);render()}}catch(e){}});
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='f-bkq')bkRenderList()});
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='f-bkc')bkLoadList(e.target.value)});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='remGo'&&b.dataset.v==='bank'){location.hash='#mehr';return}
+  if(!a.startsWith('bk'))return;
+  if(a==='bkConnect')bkConnectDlg();
+  else if(a==='bkStart')bkStart(b.dataset.v,b.dataset.c);
+  else if(a==='bkFetch')bkFetch(true);
+  else if(a==='bkSave')bkSaveSetup();
+  else if(a==='bkGenKey'){const i=$('#f-bkkey');if(i&&(!i.value||confirm(tr('Neuen Schlüssel erzeugen? Dann musst du ihn auch bei Cloudflare ändern.'))))i.value=bkGenKey()}
+  else if(a==='bkCopyKey'){const v=($('#f-bkkey')||{}).value||'';if(!v){toast('Erst einen Schlüssel erzeugen.');return}(navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast('Schlüssel kopiert.'),()=>{const i=$('#f-bkkey');i.select();toast('Schlüssel markiert, bitte kopieren.')})}
+  else if(a==='bkRenew'){const c=bk().conns[+b.dataset.i];if(c)bkStart(c.aspsp.name,c.aspsp.country)}
+  else if(a==='bkRemove'){const c=bk().conns[+b.dataset.i];if(c&&confirm(tr('Verbindung zu dieser Bank entfernen? Die Umsätze bleiben in der App.'))){bk().conns.splice(+b.dataset.i,1);save();render();bkApi('/session?id='+encodeURIComponent(c.sid),{method:'DELETE'}).catch(()=>{})}}
+});
+I18N.push(['Bankverbindung','Bank connection','Bankovna veza'],['Umsätze abrufen','Fetch transactions','Dohvati transakcije'],['+ Bank verbinden','+ Connect bank','+ Poveži banku'],['Bank verbinden','Connect bank','Poveži banku'],['Noch keine Bank verbunden.','No bank connected yet.','Još nijedna banka nije povezana.'],['Einstellungen','Settings','Postavke'],
+['Holt Umsätze und Kontostände direkt von der Bank. Dafür brauchst du einmalig ein kostenloses Konto bei Enable Banking und einen eigenen Vermittler bei Cloudflare.','Fetches transactions and balances directly from the bank. This needs a free Enable Banking account and your own relay on Cloudflare, set up once.','Dohvaća transakcije i stanja izravno iz banke. Za to jednom trebaš besplatan račun kod Enable Bankinga i vlastitog posrednika na Cloudflareu.'],
+['Adresse des Vermittlers','Relay address','Adresa posrednika'],['Zugangsschlüssel','Access key','Pristupni ključ'],['Schlüssel erzeugen','Generate key','Generiraj ključ'],['Schlüssel kopieren','Copy key','Kopiraj ključ'],['Speichern & testen','Save & test','Spremi i testiraj'],
+['Den Zugangsschlüssel trägst du bei Cloudflare als ACCESS_KEY ein. Er steht nur hier in der App und in deinem Backup.','Enter the access key on Cloudflare as ACCESS_KEY. It is stored only here in the app and in your backup.','Pristupni ključ unesi na Cloudflareu kao ACCESS_KEY. Spremljen je samo ovdje u aplikaciji i u tvojoj kopiji.'],
+['Du meldest dich gleich direkt bei deiner Bank an.','You will sign in directly with your bank.','Prijavit ćeš se izravno u svojoj banci.'],['Bank suchen','Search bank','Traži banku'],['z. B. DKB, Santander, Raiffeisen','e.g. DKB, Santander, Raiffeisen','npr. DKB, Santander, Raiffeisen'],['Wird geladen …','Loading …','Učitavanje …'],['Keine Bank gefunden.','No bank found.','Banka nije pronađena.'],['Österreich','Austria','Austrija'],
+['Weiter zur Bank …','Continuing to bank …','Nastavak prema banci …'],['Bank wird verbunden …','Connecting bank …','Povezivanje banke …'],['Umsätze werden abgerufen …','Fetching transactions …','Dohvaćanje transakcija …'],['Keine neuen Umsätze.','No new transactions.','Nema novih transakcija.'],
+['{n} neue Umsätze von der Bank, davon {n} automatisch zugeordnet.','{n} new transactions from the bank, {n} assigned automatically.','{n} novih transakcija iz banke, od toga {n} automatski razvrstano.'],
+['Verbindung zum Vermittler klappt.','Connection to relay works.','Veza s posrednikom radi.'],['Die Adresse muss mit https:// beginnen.','The address must start with https://.','Adresa mora počinjati s https://.'],
+['Der Vermittler ist nicht erreichbar. Prüfe die Adresse und die Internetverbindung.','The relay cannot be reached. Check the address and internet connection.','Posrednik nije dostupan. Provjeri adresu i internetsku vezu.'],
+['Der Zugangsschlüssel passt nicht zu dem bei Cloudflare.','The access key does not match the one on Cloudflare.','Pristupni ključ ne odgovara onome na Cloudflareu.'],
+['Der Vermittler erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).','The relay does not allow this app address (ALLOWED_ORIGIN).','Posrednik ne dopušta ovu adresu aplikacije (ALLOWED_ORIGIN).'],
+['Beim Vermittler fehlen EB_APP_ID, EB_KEY oder ACCESS_KEY.','The relay is missing EB_APP_ID, EB_KEY or ACCESS_KEY.','Posredniku nedostaje EB_APP_ID, EB_KEY ili ACCESS_KEY.'],
+['Die Freigabe der Bank ist abgelaufen. Bitte neu verbinden.','The bank authorisation has expired. Please reconnect.','Odobrenje banke je isteklo. Poveži ponovno.'],
+['Die Bank hat die Freigabe abgebrochen.','The bank cancelled the authorisation.','Banka je prekinula odobrenje.'],['Die Rückmeldung der Bank passt nicht zu dieser App. Bitte erneut verbinden.','The bank response does not match this app. Please connect again.','Odgovor banke ne odgovara ovoj aplikaciji. Poveži ponovno.'],
+['Bitte zuerst den Vermittler unter „Mehr“ einrichten.','Please set up the relay under “More” first.','Najprije postavi posrednika pod „Više“.'],
+['Verbunden, aber die Bank hat keine Konten geliefert. Ist das Konto bei Enable Banking freigeschaltet (Linked Accounts)?','Connected, but the bank returned no accounts. Is the account linked in Enable Banking (Linked Accounts)?','Povezano, ali banka nije vratila račune. Je li račun povezan u Enable Bankingu (Linked Accounts)?'],
+['Abgelaufen, bitte neu verbinden','Expired, please reconnect','Isteklo, poveži ponovno'],['Neu verbinden','Reconnect','Poveži ponovno'],['Erst einen Schlüssel erzeugen.','Generate a key first.','Najprije generiraj ključ.'],['Schlüssel kopiert.','Key copied.','Ključ kopiran.'],['Schlüssel markiert, bitte kopieren.','Key selected, please copy.','Ključ označen, kopiraj ga.'],
+['Neuen Schlüssel erzeugen? Dann musst du ihn auch bei Cloudflare ändern.','Generate a new key? You will also need to change it on Cloudflare.','Generirati novi ključ? Tada ga moraš promijeniti i na Cloudflareu.'],
+['Verbindung zu dieser Bank entfernen? Die Umsätze bleiben in der App.','Remove the connection to this bank? Transactions stay in the app.','Ukloniti vezu s ovom bankom? Transakcije ostaju u aplikaciji.']);
+PREFIX.push(['Verbunden bis ','Connected until ','Povezano do '],['Zuletzt abgerufen: ','Last fetched: ','Zadnje dohvaćeno: '],['Bankverbindung ','Bank connection ','Bankovna veza '],['Fehler von der Bank-Schnittstelle','Error from bank interface','Greška bankovnog sučelja']);
+I18N.push(['Läuft am {n} ab, bitte neu verbinden','Expires on {n}, please reconnect','Ističe {n}, poveži ponovno']);
+
+I18N.push(['{n} Konten','{n} accounts','{n} računa'],['{n} Konto','{n} account','{n} račun']);
