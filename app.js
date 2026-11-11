@@ -417,7 +417,7 @@ function autoAssign2(tx){
 /* ---------- Rahmen ---------- */
 const TABS=[['start','Übersicht','home'],['geld','Ausgaben','geld'],['immo','Immobilien','immo'],['konten','Konten','konten'],['mehr','Mehr','more']];
 function curTab(){const t=(location.hash||'#start').slice(1);return TABS.some(x=>x[0]===t)?t:'start'}
-function render(){if(locked)return;document.body.classList.toggle('hide',!!ui.hide);
+function render(){if(locked||authOpen)return;document.body.classList.toggle('hide',!!ui.hide);
   const cur=curTab(),openN=S.txs.filter(t=>t.type==='open').length;
   const nav=TABS.map(t=>'<a href="#'+t[0]+'"'+(t[0]===cur?' class="on" aria-current="page"':'')+'>'+ICON[t[2]]+'<span>'+t[1]+'</span>'+(t[0]==='geld'&&openN?'<b class="badge">'+openN+'</b>':'')+'</a>').join('');
   const V={start:vStart,geld:vGeld,immo:vImmo,konten:vKonten,mehr:vMehr};
@@ -606,7 +606,7 @@ function editAcc(id){const a=id?accOf(id):{name:'',type:'bank',note:''};
   modal('<h3>'+(id?'Konto bearbeiten':'Neues Konto')+'</h3><label>Name<input id="f-aname" value="'+esc(a.name)+'" placeholder="z. B. Sparkasse, Bitcoin, Bargeld"></label><label>Art<select id="f-atype">'+Object.entries(ACC_TYPES).map(([k,v])=>'<option value="'+k+'"'+sel(k===a.type)+'>'+v+'</option>').join('')+'</select></label>'+(id?'':'<label>Aktueller Stand (€)<input id="f-aval" inputmode="decimal"></label>')+'<label>IBAN (damit Auszüge automatisch dem Konto zugeordnet werden)<input id="f-aiban" value="'+esc(a.iban||'')+'"></label><label>Notiz<input id="f-anote" value="'+esc(a.note)+'"></label><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveAcc" data-id="'+(id||'')+'">Speichern</button></div>')}
 /* ---------- Mehr ---------- */
 function vMehr(){
-  return '<h2>Mehr</h2>'
+  return '<h2>Mehr</h2>'+acctSection()
   +'<section class="group"><h3>Von Hand eintragen</h3><p class="hint">Für Barzahlungen oder alles, was nicht im Kontoauszug steht.</p><div class="form"><button data-act="addManual" data-v="expense">+ Ausgabe</button><button data-act="addManual" data-v="income">+ Einnahme</button></div></section>'
   +bkSection()+'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
   +'<section class="group"><h3>Jahresbericht</h3><p class="hint">Alle Zahlen eines Jahres als Datei, zum Ausdrucken oder für den Steuerberater.</p><button data-act="report">Jahresbericht erstellen</button></section>'
@@ -896,7 +896,7 @@ document.addEventListener('input',e=>{if(e.target.id==='txq'){ui.q=e.target.valu
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
 window.addEventListener('hashchange',()=>{render();window.scrollTo(0,0)});
-let S0=null;(async()=>{S=await loadState();applyLang();S.txs.forEach(t=>{if(t.type==='open')autoAssign2(t)});if(S.settings.lock&&!recentUnlock())showLock();else{render();runGo()}try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}})();
+let S0=null;(async()=>{S=await loadState();applyLang();S.txs.forEach(t=>{if(t.type==='open')autoAssign2(t)});if(needAuth())showAuth('login');else if(S.settings.lock&&!recentUnlock())showLock();else{render();runGo()}try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}})();
 try{const y=+sessionStorage.getItem('scrollY');if(y)window.scrollTo(0,y);sessionStorage.removeItem('scrollY')}catch(e){}
 
 /* ---------- Sprachen: [Deutsch, English, Hrvatski] ---------- */
@@ -1055,10 +1055,10 @@ I18N.push(['Datei auswählen','Choose file','Odaberi datoteku'],['Kamera öffnen
 const BK_CB=(()=>{try{const q=new URLSearchParams(location.search);if(q.get('code')||q.get('error')){const r={code:q.get('code'),state:q.get('state'),error:q.get('error'),desc:q.get('error_description')};history.replaceState(null,'',location.pathname+location.hash);return r}}catch(e){}return null})();
 let bkBusy=false;
 const bk=()=>{S.bank=S.bank||{url:'',key:'',conns:[],lastFetch:0};S.bank.conns=S.bank.conns||[];return S.bank};
-const bkReady=()=>{const b=bk();return !!(b.url&&b.key)};
+const bkReady=()=>{if(loggedIn())return !!acct.bank;const b=bk();return !!(b.url&&b.key)};
 const bkRedirect=()=>location.origin+location.pathname.replace(/index\.html$/,'');
-async function bkApi(path,opt){const b=bk();let r;
-  try{r=await fetch(b.url.replace(/\/+$/,'')+path,Object.assign({},opt||{},{headers:{'X-DJC-Key':b.key,'Content-Type':'application/json'}}))}catch(e){throw {code:'NETWORK'}}
+async function bkApi(path,opt){const b=bk();let r;const li=loggedIn();
+  try{r=await fetch((li?SRV:b.url.replace(/\/+$/,''))+path,Object.assign({},opt||{},{headers:li?{Authorization:'Bearer '+acct.token,'Content-Type':'application/json'}:{'X-DJC-Key':b.key,'Content-Type':'application/json'}}))}catch(e){throw {code:'NETWORK'}}
   let j={};try{j=await r.json()}catch(e){}
   if(!r.ok)throw {code:j.error||('HTTP_'+r.status),msg:j.message||'',status:r.status};return j}
 function bkErrText(e){const c=e&&e.code;
@@ -1066,16 +1066,18 @@ function bkErrText(e){const c=e&&e.code;
   if(c==='WRONG_KEY')return 'Der Zugangsschlüssel passt nicht zu dem bei Cloudflare.';
   if(c==='FORBIDDEN_ORIGIN')return 'Der Vermittler erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).';
   if(c==='NOT_CONFIGURED')return 'Beim Vermittler fehlen EB_APP_ID, EB_KEY oder ACCESS_KEY.';
+  if(c==='NO_SESSION')return 'Bitte melde dich erneut an.';
+  if(c==='BANK_NOT_ALLOWED')return 'Bankverbindung ist für dein Konto nicht freigeschaltet.';
   if(c==='EXPIRED_SESSION')return 'Die Freigabe der Bank ist abgelaufen. Bitte neu verbinden.';
   return 'Fehler von der Bank-Schnittstelle'+(c?' ('+c+')':'')+'.'}
-function bkSection(){const b=bk();const T=todayISO();
+function bkSection(){const b=bk();const T=todayISO();const LI=loggedIn();if(LI&&!acct.bank)return '<section class="group"><h3>Bankverbindung</h3><p class="hint">Bankverbindung ist für dein Konto nicht freigeschaltet.</p></section>';
   const conns=b.conns.map((c,i)=>{const until=(c.valid_until||'').slice(0,10),d=until?daysTo(until):999,exp=c.err==='expired'||d<0;
     return '<div class="erow"><span><b>'+esc(c.aspsp.name)+'</b><small>'+(exp?'Abgelaufen, bitte neu verbinden':'Verbunden bis '+dfmt(until))+' · <span>'+c.accounts.length+(c.accounts.length===1?' Konto':' Konten')+'</span></small></span><span class="form" style="margin:0">'+(exp||d<=14?'<button class="small primary" data-act="bkRenew" data-i="'+i+'">Neu verbinden</button>':'')+'<button class="small" data-act="bkRemove" data-i="'+i+'" aria-label="Entfernen">×</button></span></div>'}).join('');
   return '<section class="group"><h3>Bankverbindung</h3>'
     +(bkReady()?(b.conns.length?'<div class="elist">'+conns+'</div>':'<p class="hint">Noch keine Bank verbunden.</p>')
       +'<div class="form"><button class="primary" data-act="bkFetch">Umsätze abrufen</button><button data-act="bkConnect">+ Bank verbinden</button></div>'
       +(b.lastFetch?'<p class="hint">Zuletzt abgerufen: '+dfmt(new Date(b.lastFetch).toISOString().slice(0,10))+' '+new Date(b.lastFetch).toTimeString().slice(0,5)+'</p>':'')
-      +'<details class="bkset"'+(b.conns.length?'':' open')+'><summary>Einstellungen</summary>'+bkSetupForm()+'</details>'
+      +(LI?'':'<details class="bkset"'+(b.conns.length?'':' open')+'><summary>Einstellungen</summary>'+bkSetupForm()+'</details>')
       :'<p class="hint">Holt Umsätze und Kontostände direkt von der Bank. Dafür brauchst du einmalig ein kostenloses Konto bei Enable Banking und einen eigenen Vermittler bei Cloudflare.</p>'+bkSetupForm())
     +'</section>'}
 function bkSetupForm(){const b=bk();return '<label>Adresse des Vermittlers<input id="f-bkurl" value="'+esc(b.url||'')+'" placeholder="https://djc-bank.….workers.dev" inputmode="url"></label>'
@@ -1157,7 +1159,7 @@ async function bkFetch(manual){if(bkBusy||!bkReady())return;const b=bk();if(!b.c
 function bankAfterBoot(){if(BK_CB&&!bankAfterBoot.done){bankAfterBoot.done=true;bkCallback(BK_CB);return}
   if(bankAfterBoot.done)return;bankAfterBoot.done=true;
   if(bkReady()&&bk().conns.length&&Date.now()-(bk().lastFetch||0)>4*3600e3)bkFetch(false)}
-{const _rg=runGo;runGo=function(){_rg();bankAfterBoot()}}
+{const _rg=runGo;runGo=function(){_rg();(async()=>{try{if(loggedIn())await syncPull(true)}catch(e){}bankAfterBoot()})()}}
 {const _ri=remindItems;remindItems=function(){const out=_ri();if(S.bank&&S.bank.conns)S.bank.conns.forEach(c=>{const u=(c.valid_until||'').slice(0,10);const d=u?daysTo(u):999;
   if(c.err==='expired'||d<=14)out.push({date:u||todayISO(),t:'Bankverbindung '+c.aspsp.name,s:c.err==='expired'||d<0?'Abgelaufen, bitte neu verbinden':'Läuft am '+dfmt(u)+' ab, bitte neu verbinden',lvl:c.err==='expired'||d<0?'late':'partial',act:'bank'})});
   return out.sort((a,b)=>a.date.localeCompare(b.date))}}
@@ -1235,3 +1237,165 @@ I18N.push(['Kontostände verbundener Banken kommen automatisch. Andere Konten an
   document.addEventListener('contextmenu',e=>{if(e.target.closest('[data-sort] > [data-id]'))e.preventDefault()});
 }
 I18N.push(['Reihenfolge gespeichert.','Order saved.','Redoslijed spremljen.'],['Zum Sortieren lange gedrückt halten und ziehen.','Press and hold, then drag to reorder.','Za razvrstavanje drži pritisnuto i povuci.']);
+
+/* ====================================================================
+   Konto: Anmeldung, Ende-zu-Ende-Verschlüsselung, Sync über den eigenen Server
+   Das Passwort verlässt nie das Gerät. Aus ihm werden zwei Schlüssel abgeleitet:
+   einer zum Anmelden (geht zum Server) und einer zum Entschlüsseln (bleibt hier).
+   ==================================================================== */
+const SRV=(window.DJC_SERVER||'').replace(/\/+$/,'');
+let acct=null,authOpen=false,syncBusy=false,pushT=null,applying=false;
+try{acct=JSON.parse(localStorage.getItem('djc-acct')||'null')}catch(e){}
+const saveAcct=()=>{try{acct?localStorage.setItem('djc-acct',JSON.stringify(acct)):localStorage.removeItem('djc-acct')}catch(e){}};
+const loggedIn=()=>!!(SRV&&acct&&acct.token);
+const localMode=()=>{try{return localStorage.getItem('djc-local')==='1'}catch(e){return false}};
+function needAuth(){return !!SRV&&!loggedIn()&&!localMode()}
+/* --- Kryptografie --- */
+const TE=new TextEncoder(),TD=new TextDecoder();
+const b2a=u=>{u=new Uint8Array(u);let s='';for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)};
+const a2b=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function derive(secret,salt){const base=await crypto.subtle.importKey('raw',TE.encode(secret),'PBKDF2',false,['deriveBits']);
+  const bits=new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:TE.encode(salt),iterations:310000},base,512));
+  return {auth:b2a(bits.slice(0,32)),kek:await crypto.subtle.importKey('raw',bits.slice(32),'AES-GCM',false,['encrypt','decrypt'])}}
+const pwSalt=e=>'djc-capital-pw|'+e,recSalt=e=>'djc-capital-rec|'+e;
+async function gcmEnc(key,data){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,data));const o=new Uint8Array(12+ct.length);o.set(iv);o.set(ct,12);return o}
+async function gcmDec(key,buf){return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:buf.slice(0,12)},key,buf.slice(12)))}
+async function mkKey(raw){return crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt'])}
+async function zip(u){if(typeof CompressionStream==='undefined')return [0,u];const s=new Blob([u]).stream().pipeThrough(new CompressionStream('gzip'));return [1,new Uint8Array(await new Response(s).arrayBuffer())]}
+async function unzip(f,u){if(!f)return u;const s=new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'));return new Uint8Array(await new Response(s).arrayBuffer())}
+async function getMK(){try{return await idbGet(KV,'acct-mk')}catch(e){return null}}
+async function sealState(obj){const mk=await getMK();if(!mk)throw new Error('NO_KEY');const [f,z]=await zip(TE.encode(JSON.stringify(obj)));const ct=await gcmEnc(mk,z);const o=new Uint8Array(1+ct.length);o[0]=f;o.set(ct,1);return b2a(o)}
+async function openState(b64){const mk=await getMK();const u=a2b(b64);return JSON.parse(TD.decode(await unzip(u[0],await gcmDec(mk,u.slice(1)))))}
+function recoveryCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',r=crypto.getRandomValues(new Uint8Array(20));let s='';r.forEach((x,i)=>{s+=A[x%32];if(i%4===3&&i<19)s+='-'});return s}
+const normCode=c=>String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/(.{4})(?=.)/g,'$1-');
+/* --- Server --- */
+async function api(path,opt){let r;try{r=await fetch(SRV+path,Object.assign({},opt||{},{headers:Object.assign({'Content-Type':'application/json'},acct&&acct.token?{Authorization:'Bearer '+acct.token}:{})}))}catch(e){throw {code:'NETWORK'}}
+  let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw {code:j.error||('HTTP_'+r.status),status:r.status,version:j.version};return j}
+function authErr(e){const c=e&&e.code;return ({NETWORK:'Keine Verbindung zum Server. Prüfe das Internet.',WRONG_LOGIN:'E-Mail oder Passwort stimmt nicht.',WRONG_CODE:'E-Mail oder Wiederherstellungscode stimmt nicht.',TOO_MANY:'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.',NOT_INVITED:'Für diese E-Mail-Adresse ist die Registrierung nicht freigeschaltet.',EXISTS:'Für diese E-Mail gibt es schon ein Konto. Bitte anmelden.',NO_DATABASE:'Beim Server fehlt die Datenbank (Bindung DB).',FORBIDDEN_ORIGIN:'Der Server erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).'})[c]||('Fehler'+(c?' ('+c+')':'')+'.')}
+/* --- Zustand für den Tresor --- */
+const ARR_KEYS=['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders'];
+function exportS(){const o=JSON.parse(JSON.stringify(S));if(o.settings)delete o.settings.lock;delete o._t;return o}
+const hasData=s=>!!s&&ARR_KEYS.some(k=>Array.isArray(s[k])&&s[k].length);
+function mergeInto(local,server){/* Neues vom anderen Gerät übernehmen, eigene Änderungen behalten */
+  ARR_KEYS.forEach(k=>{const L=local[k]=local[k]||[];const ids=new Set(L.map(x=>x&&x.id).filter(Boolean));(server[k]||[]).forEach(x=>{if(x&&x.id&&!ids.has(x.id))L.push(x)})});
+  if(server.bank&&server.bank.conns){local.bank=local.bank||{conns:[]};local.bank.conns=local.bank.conns||[];const sid=new Set(local.bank.conns.map(c=>c.sid));server.bank.conns.forEach(c=>{if(!sid.has(c.sid))local.bank.conns.push(c)});local.bank.lastFetch=Math.max(local.bank.lastFetch||0,server.bank.lastFetch||0)}
+  (server.cats||[]).forEach(c=>{if(!(local.cats||[]).includes(c))(local.cats=local.cats||[]).push(c)});
+  return local}
+async function applyServer(obj){const lock=S&&S.settings&&S.settings.lock;obj.settings=obj.settings||{};if(lock)obj.settings.lock=lock;else delete obj.settings.lock;
+  applying=true;try{S=migrate(obj);await idbSet(KV,'state',S)}finally{applying=false}if(!locked&&!authOpen)render()}
+/* --- Sync --- */
+function schedulePush(ms){if(!loggedIn())return;clearTimeout(pushT);pushT=setTimeout(()=>syncPush(),ms==null?2500:ms)}
+async function syncPush(){if(!loggedIn()||syncBusy)return;if(!acct.dirty)return;if(!navigator.onLine){setSync('offline');return}
+  syncBusy=true;setSync('busy');
+  try{const blob=await sealState(exportS());
+    try{const j=await api('/vault',{method:'PUT',body:JSON.stringify({base:acct.version||0,blob})});acct.version=j.version;acct.dirty=false;acct.lastSync=Date.now();saveAcct();setSync('ok')}
+    catch(e){if(e.code==='CONFLICT'){const j=await api('/vault');if(j.blob){const srv=await openState(j.blob);mergeInto(S,srv);acct.version=j.version;saveAcct();applying=true;try{await idbSet(KV,'state',S)}finally{applying=false}render();syncBusy=false;return syncPush()}}else throw e}
+  }catch(e){syncFail(e)}finally{syncBusy=false}}
+async function syncPull(quiet){if(!loggedIn()||syncBusy)return;if(!navigator.onLine){setSync('offline');return}
+  syncBusy=true;setSync('busy');
+  try{const j=await api('/vault?since='+(acct.version||0));
+    if(j.blob&&j.version>(acct.version||0)){const srv=await openState(j.blob);
+      if(acct.dirty){mergeInto(S,srv);acct.version=j.version;saveAcct();applying=true;try{await idbSet(KV,'state',S)}finally{applying=false}render();syncBusy=false;await syncPush();return}
+      acct.version=j.version;await applyServer(srv);if(!quiet)toast('Neuer Stand von einem anderen Gerät geladen.')}
+    else if(!j.version&&acct.dirty!==false){acct.dirty=true}
+    acct.lastSync=Date.now();saveAcct();setSync('ok');
+  }catch(e){syncFail(e)}finally{syncBusy=false}
+  if(acct&&acct.dirty)schedulePush(500)}
+function syncFail(e){if(e&&(e.code==='NO_SESSION'||e.status===401)){acct.token=null;saveAcct();setSync('');toast('Bitte melde dich erneut an.');showAuth('login');return}setSync(e&&e.code==='NETWORK'?'offline':'err')}
+let syncState='';function setSync(s){syncState=s;const el=document.getElementById('syncst');if(el)el.innerHTML=syncText()}
+function syncText(){if(!loggedIn())return '';const t=acct.lastSync?new Date(acct.lastSync):null;
+  return syncState==='busy'?'Wird synchronisiert …':syncState==='offline'?'Offline. Änderungen werden später übertragen.':syncState==='err'?'Synchronisieren hat nicht geklappt.':acct.dirty?'Änderungen werden übertragen …':t?'Synchronisiert '+dfmt(t.toISOString().slice(0,10))+' '+t.toTimeString().slice(0,5):'Noch nicht synchronisiert.'}
+{const _ds=doSave;doSave=async function(){const r=await _ds();if(!applying&&loggedIn()){acct.dirty=true;saveAcct();schedulePush()}return r}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&loggedIn()&&!locked&&!authOpen)syncPull(true);else if(document.hidden&&loggedIn()&&acct.dirty)syncPush()});
+window.addEventListener('online',()=>{if(loggedIn()){syncPull(true)}});
+setInterval(()=>{if(loggedIn()&&!document.hidden&&!locked&&!authOpen)syncPull(true)},5*60e3);
+/* --- Anmeldebildschirm --- */
+let authView='login';
+function showAuth(view){authOpen=true;authView=view||authView;closeModal();const e=esc((acct&&acct.email)||'');
+  const head='<div class="logo big" aria-hidden="true"><span>DJ</span></div><h2>My Capital</h2>';
+  let body='';
+  if(authView==='login')body='<p class="hint">Melde dich an. Deine Daten sind dann auf allen Geräten gleich und sicher gespeichert.</p>'
+    +'<form class="authf" data-auth="login"><label>E-Mail<input id="a-email" type="email" autocomplete="username" value="'+e+'" required></label><label>Passwort<input id="a-pw" type="password" autocomplete="current-password" required></label><button class="primary" type="submit">Anmelden</button></form>'
+    +'<div class="authl"><button class="link" data-act="authView" data-v="register">Konto erstellen</button><button class="link" data-act="authView" data-v="recover">Passwort vergessen?</button></div>';
+  else if(authView==='register')body='<p class="hint">Neues Konto. Das Passwort kann niemand zurücksetzen, auch nicht der Server. Dafür bekommst du gleich einen Wiederherstellungscode.</p>'
+    +'<form class="authf" data-auth="register"><label>E-Mail<input id="a-email" type="email" autocomplete="username" value="'+e+'" required></label><label>Passwort (mind. 8 Zeichen)<input id="a-pw" type="password" autocomplete="new-password" minlength="8" required></label><label>Passwort wiederholen<input id="a-pw2" type="password" autocomplete="new-password" minlength="8" required></label><button class="primary" type="submit">Konto erstellen</button></form>'
+    +'<div class="authl"><button class="link" data-act="authView" data-v="login">Ich habe schon ein Konto</button></div>';
+  else body='<p class="hint">Mit deinem Wiederherstellungscode legst du ein neues Passwort fest. Deine Daten bleiben erhalten.</p>'
+    +'<form class="authf" data-auth="recover"><label>E-Mail<input id="a-email" type="email" autocomplete="username" value="'+e+'" required></label><label>Wiederherstellungscode<input id="a-code" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" required></label><label>Neues Passwort (mind. 8 Zeichen)<input id="a-pw" type="password" autocomplete="new-password" minlength="8" required></label><label>Passwort wiederholen<input id="a-pw2" type="password" autocomplete="new-password" minlength="8" required></label><button class="primary" type="submit">Neues Passwort festlegen</button></form>'
+    +'<div class="authl"><button class="link" data-act="authView" data-v="login">Zurück zur Anmeldung</button></div>';
+  $('#root').innerHTML='<div class="lock auth">'+head+body+'<div class="authl"><button class="link dim" data-act="authLocal">Ohne Konto nur auf diesem Gerät nutzen</button></div></div>'}
+function authDone(){authOpen=false;try{localStorage.removeItem('djc-local')}catch(e){}markUnlocked&&markUnlocked();render();runGo()}
+async function doLogin(email,pw){const k=await derive(pw,pwSalt(email));const j=await api('/auth/login',{method:'POST',body:JSON.stringify({email,auth:k.auth})});
+  const raw=await gcmDec(k.kek,a2b(j.mkPw));await idbSet(KV,'acct-mk',await mkKey(raw));
+  const keepDirty=!!(acct&&acct.email===j.email&&acct.dirty);acct={email:j.email,token:j.token,bank:!!j.bank,version:keepDirty?acct.version:0,dirty:keepDirty,lastSync:0};saveAcct();await afterLogin(keepDirty)}
+async function afterLogin(keepDirty){const v=await api('/vault');
+  if(v.blob){const srv=await openState(v.blob);
+    if(keepDirty){mergeInto(S,srv);acct.version=v.version;acct.dirty=true;saveAcct();await idbSet(KV,'state',S)}
+    else{if(hasData(S)&&JSON.stringify(exportS())!==JSON.stringify(srv)){try{await idbSet(KV,'state-before-login',{date:Date.now(),state:JSON.parse(JSON.stringify(S))})}catch(e){}}
+      acct.version=v.version;acct.dirty=false;acct.lastSync=Date.now();saveAcct();await applyServer(srv)}}
+  else{acct.version=v.version||0;acct.dirty=true;saveAcct()}
+  schedulePush(300)}
+async function doRegister(email,pw){const k=await derive(pw,pwSalt(email)),code=recoveryCode(),r=await derive(code.replace(/-/g,''),recSalt(email));
+  const raw=crypto.getRandomValues(new Uint8Array(32));const mk=await mkKey(raw);
+  const mkPw=b2a(await gcmEnc(k.kek,raw)),mkRec=b2a(await gcmEnc(r.kek,raw));
+  await idbSet(KV,'acct-mk',mk);const blob=await sealState(exportS());
+  const j=await api('/auth/register',{method:'POST',body:JSON.stringify({email,auth:k.auth,recAuth:r.auth,mkPw,mkRec,blob})});
+  acct={email:j.email,token:j.token,bank:!!j.bank,version:j.version||1,dirty:false,lastSync:Date.now()};saveAcct();return code}
+async function doRecover(email,code,pw){const r=await derive(code.replace(/-/g,''),recSalt(email));
+  const c=await api('/auth/recover',{method:'POST',body:JSON.stringify({email,recAuth:r.auth,check:1})});
+  const raw=await gcmDec(r.kek,a2b(c.mkRec));const k=await derive(pw,pwSalt(email));const mkPw=b2a(await gcmEnc(k.kek,raw));
+  const j=await api('/auth/recover',{method:'POST',body:JSON.stringify({email,recAuth:r.auth,auth:k.auth,mkPw})});
+  await idbSet(KV,'acct-mk',await mkKey(raw));acct={email:j.email,token:j.token,bank:!!j.bank,version:0,dirty:false,lastSync:0};saveAcct();await afterLogin(false)}
+function showRecoveryCode(code,after){modal('<h3>Dein Wiederherstellungscode</h3><p class="hint">Damit kommst du an deine Daten, wenn du das Passwort vergisst. Ohne Code und Passwort kann sie niemand wiederherstellen, auch nicht der Server.</p><div class="reccode" id="reccode">'+esc(code)+'</div><div class="form"><button data-act="recCopy">Kopieren</button><button data-act="recFile">Als Datei speichern</button></div><label class="chk"><input type="checkbox" id="f-recok"> Ich habe den Code sicher gespeichert (z. B. Passwort-Manager oder ausgedruckt).</label><div class="mact"><button class="primary" data-act="recDone" disabled>Weiter</button></div>');
+  showRecoveryCode.code=code;showRecoveryCode.after=after}
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='f-recok'){const b=document.querySelector('[data-act=recDone]');if(b)b.disabled=!e.target.checked}});
+document.addEventListener('submit',async e=>{const f=e.target.closest('form.authf');if(!f)return;e.preventDefault();const btn=f.querySelector('button[type=submit]');
+  const email=($('#a-email').value||'').trim().toLowerCase(),pw=($('#a-pw')||{}).value||'',pw2=($('#a-pw2')||{}).value;
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){toast('Bitte eine gültige E-Mail eingeben.');return}
+  if(f.dataset.auth!=='login'&&pw.length<8){toast('Das Passwort braucht mindestens 8 Zeichen.');return}
+  if(pw2!=null&&pw2!==pw){toast('Die Passwörter stimmen nicht überein.');return}
+  btn.disabled=true;const old=btn.textContent;btn.textContent=tr('Bitte warten …');
+  try{
+    if(f.dataset.auth==='login'){await doLogin(email,pw);toast('Angemeldet.');authDone()}
+    else if(f.dataset.auth==='register'){const code=await doRegister(email,pw);authOpen=false;try{localStorage.removeItem('djc-local')}catch(_){}render();showRecoveryCode(code,()=>{toast('Konto erstellt. Deine Daten werden jetzt synchronisiert.');runGo()})}
+    else{const code=normCode($('#a-code').value);await doRecover(email,code,pw);toast('Neues Passwort gespeichert.');authDone()}
+  }catch(err){toast(authErr(err));btn.disabled=false;btn.textContent=old}});
+async function doLogout(){if(acct&&acct.dirty){try{await syncPush()}catch(e){}}
+  if(acct&&acct.dirty&&!confirm(tr('Einige Änderungen sind noch nicht übertragen. Trotzdem abmelden?')))return;
+  try{await api('/auth/logout',{method:'POST'})}catch(e){}
+  const lock=S.settings&&S.settings.lock;acct=null;saveAcct();
+  try{await idbSet(KV,'acct-mk',null);await idbSet(KV,'state',null);const d=await idb();await new Promise(r=>{const t=d.transaction(RC,'readwrite');t.objectStore(RC).clear();t.oncomplete=r;t.onerror=r})}catch(e){}
+  S=blankState();if(lock)S.settings.lock=lock;await idbSet(KV,'state',S);try{localStorage.removeItem('djc-local')}catch(e){}
+  closeModal();showAuth('login');toast('Abgemeldet. Die Daten wurden von diesem Gerät entfernt.')}
+async function receiptCount(){try{const d=await idb();return await new Promise(r=>{const q=d.transaction(RC).objectStore(RC).count();q.onsuccess=()=>r(q.result);q.onerror=()=>r(0)})}catch(e){return 0}}
+function acctSection(){if(!SRV)return '';
+  if(loggedIn())return '<section class="group"><h3>Konto & Sync</h3><div class="erow"><span><b>'+esc(acct.email)+'</b><small id="syncst">'+esc(tr(syncText()))+'</small></span></div><div class="form"><button data-act="syncNow">Jetzt synchronisieren</button><button data-act="logout">Abmelden</button></div><p class="hint">Deine Daten sind verschlüsselt in deinem Konto gespeichert und auf allen Geräten gleich, auf denen du angemeldet bist. Belegfotos bleiben auf dem Gerät, auf dem sie aufgenommen wurden.</p></section>';
+  return '<section class="group"><h3>Konto & Sync</h3><p class="hint">Mit einem Konto sind deine Daten auf allen Geräten gleich und sicher verschlüsselt gespeichert.</p><div class="form"><button class="primary" data-act="authOpen">Anmelden oder Konto erstellen</button></div></section>'}
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='authView'){showAuth(b.dataset.v)}
+  else if(a==='authLocal'){try{localStorage.setItem('djc-local','1')}catch(_){}authOpen=false;render();runGo()}
+  else if(a==='authOpen'){showAuth(acct&&acct.email?'login':'register')}
+  else if(a==='syncNow'){if(acct.dirty)await syncPush();await syncPull(false);toast(syncState==='ok'?'Synchronisiert.':tr(syncText()))}
+  else if(a==='logout'){const n=await receiptCount();modal('<h3>Abmelden?</h3><p>Die Daten werden von diesem Gerät entfernt. In deinem Konto bleiben sie verschlüsselt gespeichert und kommen bei der nächsten Anmeldung zurück.</p>'+(n?'<p class="neg">'+n+' Belegfotos sind nur auf diesem Gerät gespeichert und gehen dabei verloren.</p>':'')+'<div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="logoutOk">Abmelden</button></div>')}
+  else if(a==='logoutOk'){doLogout()}
+  else if(a==='recCopy'){const c=showRecoveryCode.code;(navigator.clipboard?navigator.clipboard.writeText(c):Promise.reject()).then(()=>toast('Code kopiert.'),()=>toast(c))}
+  else if(a==='recFile'){dlBlob(new Blob(['DJ Capital – Wiederherstellungscode\r\n\r\nE-Mail: '+(acct&&acct.email)+'\r\nCode: '+showRecoveryCode.code+'\r\n\r\nGut aufbewahren. Damit kann man ein neues Passwort festlegen.\r\n'],{type:'text/plain'}),'DJ-Capital-Wiederherstellungscode.txt')}
+  else if(a==='recDone'){closeModal();const f=showRecoveryCode.after;showRecoveryCode.code=null;if(f)f()}
+});
+I18N.push(['Konto & Sync','Account & sync','Račun i sinkronizacija'],['Jetzt synchronisieren','Sync now','Sinkroniziraj sada'],['Abmelden','Sign out','Odjava'],['Abmelden?','Sign out?','Odjaviti se?'],['Anmelden','Sign in','Prijava'],['Anmelden oder Konto erstellen','Sign in or create account','Prijava ili novi račun'],['Konto erstellen','Create account','Izradi račun'],['Passwort vergessen?','Forgot password?','Zaboravljena lozinka?'],['Ich habe schon ein Konto','I already have an account','Već imam račun'],['Zurück zur Anmeldung','Back to sign in','Natrag na prijavu'],['Ohne Konto nur auf diesem Gerät nutzen','Use without account, only on this device','Koristi bez računa, samo na ovom uređaju'],
+['E-Mail','Email','E-pošta'],['Passwort','Password','Lozinka'],['Passwort (mind. 8 Zeichen)','Password (min. 8 characters)','Lozinka (najmanje 8 znakova)'],['Passwort wiederholen','Repeat password','Ponovi lozinku'],['Neues Passwort (mind. 8 Zeichen)','New password (min. 8 characters)','Nova lozinka (najmanje 8 znakova)'],['Wiederherstellungscode','Recovery code','Kod za oporavak'],['Neues Passwort festlegen','Set new password','Postavi novu lozinku'],['Bitte warten …','Please wait …','Pričekaj …'],
+['Melde dich an. Deine Daten sind dann auf allen Geräten gleich und sicher gespeichert.','Sign in. Your data will then be the same on all devices and stored securely.','Prijavi se. Tvoji podaci tada su isti na svim uređajima i sigurno spremljeni.'],
+['Neues Konto. Das Passwort kann niemand zurücksetzen, auch nicht der Server. Dafür bekommst du gleich einen Wiederherstellungscode.','New account. Nobody can reset the password, not even the server. You will get a recovery code for that.','Novi račun. Lozinku nitko ne može resetirati, ni poslužitelj. Za to ćeš dobiti kod za oporavak.'],
+['Mit deinem Wiederherstellungscode legst du ein neues Passwort fest. Deine Daten bleiben erhalten.','Use your recovery code to set a new password. Your data is kept.','Kodom za oporavak postavljaš novu lozinku. Podaci ostaju sačuvani.'],
+['Dein Wiederherstellungscode','Your recovery code','Tvoj kod za oporavak'],['Damit kommst du an deine Daten, wenn du das Passwort vergisst. Ohne Code und Passwort kann sie niemand wiederherstellen, auch nicht der Server.','You need it to access your data if you forget the password. Without code and password nobody can recover it, not even the server.','Trebaš ga ako zaboraviš lozinku. Bez koda i lozinke podatke nitko ne može vratiti, ni poslužitelj.'],
+['Kopieren','Copy','Kopiraj'],['Als Datei speichern','Save as file','Spremi kao datoteku'],['Ich habe den Code sicher gespeichert (z. B. Passwort-Manager oder ausgedruckt).','I have stored the code safely (e.g. password manager or printed).','Kod sam sigurno spremio (npr. upravitelj lozinki ili ispis).'],['Weiter','Continue','Dalje'],['Code kopiert.','Code copied.','Kod kopiran.'],
+['Mit einem Konto sind deine Daten auf allen Geräten gleich und sicher verschlüsselt gespeichert.','With an account your data is the same on all devices and stored securely encrypted.','S računom su tvoji podaci isti na svim uređajima i sigurno šifrirani.'],
+['Deine Daten sind verschlüsselt in deinem Konto gespeichert und auf allen Geräten gleich, auf denen du angemeldet bist. Belegfotos bleiben auf dem Gerät, auf dem sie aufgenommen wurden.','Your data is stored encrypted in your account and is the same on all devices where you are signed in. Receipt photos stay on the device where they were taken.','Podaci su šifrirani u tvom računu i isti na svim uređajima na kojima si prijavljen. Fotografije računa ostaju na uređaju na kojem su snimljene.'],
+['Die Daten werden von diesem Gerät entfernt. In deinem Konto bleiben sie verschlüsselt gespeichert und kommen bei der nächsten Anmeldung zurück.','The data will be removed from this device. It stays encrypted in your account and comes back at the next sign-in.','Podaci će se ukloniti s ovog uređaja. Ostaju šifrirani u tvom računu i vraćaju se pri sljedećoj prijavi.'],
+['{n} Belegfotos sind nur auf diesem Gerät gespeichert und gehen dabei verloren.','{n} receipt photos are only on this device and will be lost.','{n} fotografija računa postoji samo na ovom uređaju i bit će izgubljeno.'],
+['Wird synchronisiert …','Syncing …','Sinkronizacija …'],['Offline. Änderungen werden später übertragen.','Offline. Changes will be sent later.','Izvan mreže. Promjene će se poslati kasnije.'],['Synchronisieren hat nicht geklappt.','Sync failed.','Sinkronizacija nije uspjela.'],['Änderungen werden übertragen …','Sending changes …','Slanje promjena …'],['Noch nicht synchronisiert.','Not synced yet.','Još nije sinkronizirano.'],['Synchronisiert.','Synced.','Sinkronizirano.'],
+['Neuer Stand von einem anderen Gerät geladen.','Loaded newer data from another device.','Učitano novije stanje s drugog uređaja.'],['Bitte melde dich erneut an.','Please sign in again.','Prijavi se ponovno.'],['Angemeldet.','Signed in.','Prijavljen.'],['Neues Passwort gespeichert.','New password saved.','Nova lozinka spremljena.'],['Konto erstellt. Deine Daten werden jetzt synchronisiert.','Account created. Your data is now being synced.','Račun izrađen. Podaci se sada sinkroniziraju.'],['Abgemeldet. Die Daten wurden von diesem Gerät entfernt.','Signed out. The data was removed from this device.','Odjavljen. Podaci su uklonjeni s ovog uređaja.'],
+['Bitte eine gültige E-Mail eingeben.','Please enter a valid email.','Unesi valjanu e-poštu.'],['Das Passwort braucht mindestens 8 Zeichen.','The password needs at least 8 characters.','Lozinka treba najmanje 8 znakova.'],['Die Passwörter stimmen nicht überein.','The passwords do not match.','Lozinke se ne podudaraju.'],['Einige Änderungen sind noch nicht übertragen. Trotzdem abmelden?','Some changes have not been sent yet. Sign out anyway?','Neke promjene još nisu poslane. Ipak se odjaviti?'],
+['Keine Verbindung zum Server. Prüfe das Internet.','No connection to the server. Check the internet.','Nema veze s poslužiteljem. Provjeri internet.'],['E-Mail oder Passwort stimmt nicht.','Email or password is wrong.','E-pošta ili lozinka nije točna.'],['E-Mail oder Wiederherstellungscode stimmt nicht.','Email or recovery code is wrong.','E-pošta ili kod za oporavak nije točan.'],['Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.','Too many attempts. Please try again in 15 minutes.','Previše pokušaja. Pokušaj ponovno za 15 minuta.'],['Für diese E-Mail-Adresse ist die Registrierung nicht freigeschaltet.','Registration is not enabled for this email address.','Registracija za ovu adresu e-pošte nije omogućena.'],['Für diese E-Mail gibt es schon ein Konto. Bitte anmelden.','An account already exists for this email. Please sign in.','Za ovu e-poštu već postoji račun. Prijavi se.'],['Beim Server fehlt die Datenbank (Bindung DB).','The server is missing the database (binding DB).','Poslužitelju nedostaje baza podataka (veza DB).'],['Der Server erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).','The server does not allow this app address (ALLOWED_ORIGIN).','Poslužitelj ne dopušta ovu adresu aplikacije (ALLOWED_ORIGIN).'],
+['Bankverbindung ist für dein Konto nicht freigeschaltet.','Bank connection is not enabled for your account.','Bankovna veza nije omogućena za tvoj račun.']);
+PREFIX.push(['Synchronisiert ','Synced ','Sinkronizirano ']);
