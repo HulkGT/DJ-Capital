@@ -81,13 +81,21 @@ function rowsToTx(rows,map){
     let amt=a;
     if(map.sign>=0){const s=String(r[map.sign]||'').trim().toUpperCase();
       if(s==='S'||s==='D'||s==='SOLL'||s==='DEBIT')amt=-Math.abs(a);else if(s==='H'||s==='C'||s==='HABEN'||s==='CREDIT')amt=Math.abs(a)}
-    const names=[...new Set((map.names||[]).map(i=>String(r[i]||'').trim()).filter(Boolean))].join(' / ');
-    const iban=map.iban>=0?normIban(r[map.iban]):'';
+    let names=[...new Set((map.names||[]).map(i=>String(r[i]||'').trim()).filter(Boolean))].join(' / ');
+    let iban=map.iban>=0?normIban(r[map.iban]):'';
+    if(map.purpose>=0&&(!names||!iban)){const g=cpFromText(String(r[map.purpose]||''));if(!names)names=g.name;if(!iban)iban=g.iban}
     const purpose=map.purpose>=0?String(r[map.purpose]||'').replace(/\s+/g,' ').trim():'';
     out.push({date:d,amount:Math.round(amt*100)/100,name:names,iban:/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)?iban:'',purpose});
   }
   return out;
 }
+/* Gegenseite aus dem Verwendungszweck lesen (z. B. Santander-CSV: alles in einer Spalte) */
+function cpFromText(raw){const t=String(raw||'');let iban='';const m=t.match(/IBAN\s*:?\s*([A-Z]{2}\d{2}(?:\s?[A-Z0-9]){10,30})/);if(m)iban=normIban(m[1]).replace(/BIC.*$/,'');
+  let name='';const seg=t.split(/\s{2,}/).map(x=>x.trim()).filter(Boolean);
+  const pre=/^(SEPA-LASTSCHRIFT VON|SEPA-UEBERWEISUNG AN|SEPA-ÜBERWEISUNG AN|ÜBERWEISUNG AN|ÜBERWEISUNG VON|UEBERWEISUNG AN|UEBERWEISUNG VON|ECHTZEIT-ÜBERWEISUNG AN|ECHTZEIT-ÜBERWEISUNG VON|GUTSCHRIFT VON|LASTSCHRIFT VON|DAUERAUFTRAG AN)\b\s*/i;
+  for(let i=0;i<seg.length;i++){if(pre.test(seg[i])){let rest=seg[i].replace(pre,'').trim();if(!rest&&seg[i+1])rest=seg[i+1];
+    rest=rest.split(/\s+/).filter(w=>!/\d{6,}|^IBAN$|^BIC$/i.test(w)).join(' ');const cut=rest.search(/\s(IBAN|BIC|EREF|MREF|CRED|SVWZ)\b/i);name=(cut>0?rest.slice(0,cut):rest).replace(/\s+-\s*$/,'').trim();break}}
+  return {name:name.slice(0,80),iban:/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)?iban:''}}
 function txKey(t){return [t.date,t.amount.toFixed(2),t.iban,nrm(t.name),nrm(t.purpose)].join('|')}
 function unitMatches(u,hay){
   const ex=(u.keywords||'').split(',').map(s=>nrm(s).trim()).filter(Boolean);
@@ -399,9 +407,16 @@ function meterDlg(id){const m=(S.meterDevs||[]).find(x=>x.id===id);if(!m)return;
   +'<div class="mact"><button class="danger" data-act="delMeterDev" data-id="'+m.id+'">Zähler löschen</button><button data-act="editMeterDev" data-id="'+m.id+'">Bearbeiten</button></div>')}
 function meterDevDlg(id){const m=id?(S.meterDevs||[]).find(x=>x.id===id):{propertyId:S.props[0]&&S.props[0].id,kind:'Wasser',number:'',place:''};
   modal('<h3>'+(id?'Zähler bearbeiten':'Neuer Zähler')+'</h3><div class="grid2"><label>Objekt<select id="f-zp">'+S.props.map(p=>'<option value="'+p.id+'"'+sel(p.id===m.propertyId)+'>'+esc(p.name)+'</option>').join('')+'</select></label><label>Art<select id="f-zk">'+Object.keys(MKIND).map(k=>'<option'+sel(k===m.kind)+'>'+k+'</option>').join('')+'</select></label><label>Zählernummer<input id="f-zn" value="'+esc(m.number)+'"></label><label>Wo / welche Einheit<input id="f-zo" value="'+esc(m.place)+'" placeholder="z. B. 1. Kat, Keller"></label><label>OMM (Messstelle, Strom)<input id="f-zomm" value="'+esc(m.omm||'')+'"></label><label>Vertragskonto / Šifra potrošača<input id="f-zacc" value="'+esc(m.account||'')+'"></label><label>Code / Mjerno mjesto<input id="f-zcode" value="'+esc(m.code||'')+'"></label><label>Notiz<input id="f-znote" value="'+esc(m.note||'')+'"></label></div>'+(id?'':'<div class="grid2"><label>Erster Stand (optional)<input id="f-zv" inputmode="decimal"></label><label>Datum<input id="f-zd" type="date" value="'+todayISO()+'"></label></div>')+'<div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveMeterDev" data-id="'+(id||'')+'">Speichern</button></div>')}
+/* Eigene Umbuchung: Gegenkonto ist eines der eigenen Konten, oder Gegenseite heißt wie der Inhaber (Mehr → Profil) */
+function isOwnTransfer(tx){if(tx.iban&&S.accounts.some(a=>a.iban&&normIban(a.iban)===tx.iban))return true;
+  const on=nrm((S.settings&&S.settings.owner)||'').trim();if(on.length<5||!tx.name)return false;const nn=nrm(tx.name);
+  const parts=on.split(/\s+/);return parts.length>1&&parts.every(p=>nn.includes(p))}
+/* Einmalig: früher wurden Überweisungen an einen festen Namen als Umbuchung versteckt. Jetzt nur noch eigene Konten. */
+function mig11(){if(S.mig11)return;let n=0;S.txs.forEach(t=>{if(t.type!=='ignore')return;const hay=nrm((t.name||'')+' '+(t.purpose||''));if(/vlastiti ra|umbuchung|uebertrag eigenes/.test(hay))return;
+  const g=cpFromText(t.purpose||'');const ib=t.iban||g.iban;if(!ib||S.accounts.some(a=>a.iban&&normIban(a.iban)===ib))return;if(!t.iban)t.iban=ib;if(!t.name&&g.name)t.name=g.name;t.type='open';autoAssign2(t);n++});S.mig11=1;if(n)save()}
 function autoAssign2(tx){
   const hay=nrm(tx.name+' '+tx.purpose);
-  if(/vlastiti ra|umbuchung|uebertrag eigenes|denis jozi/.test(hay)){tx.type='ignore';return true}
+  if(/vlastiti ra|umbuchung|uebertrag eigenes/.test(hay)||isOwnTransfer(tx)){tx.type='ignore';return true}
   if(tx.amount>0&&/kamat|habenzins|zinsgutschrift/.test(hay)&&S.icats.includes('Zinsen & Dividenden')){tx.type='income';tx.category='Zinsen & Dividenden';return true}
   if(tx.amount>0){
     let c=tx.iban?S.units.filter(u=>u.iban&&normIban(u.iban)===tx.iban):[];
@@ -761,9 +776,11 @@ async function handleFile(file){
   const fn=nrm(file.name);const guess=(S.accounts.find(a=>a.type==='bank'&&fn.includes(nrm(a.name).split(/[\s(]/)[0]))||{}).id||ui.lastAcc||'';
   imp={file:file.name,parsed,map:guessCols(parsed.headers),acc:guess};showImport();
 }
+function altKey(t){return [t.date,(+t.amount).toFixed(2),nrm(t.purpose||'').replace(/\s+/g,' ').slice(0,120)].join('|')}
+function altCounts(){const c={};S.txs.forEach(t=>{const k=altKey(t);c[k]=(c[k]||0)+1});return c}
 function keyCounts(){const c={};S.txs.forEach(t=>{const k=t.key||txKey(t);c[k]=(c[k]||0)+1});return c}
 const impList=()=>imp.pdf?imp.pdf.txs:rowsToTx(imp.parsed.data,imp.map);
-function impPreview(){const list=impList(),ex=keyCounts(),seen={};let neu=0,dup=0;list.forEach(t=>{const k=txKey(t);seen[k]=(seen[k]||0)+1;if((ex[k]||0)>=seen[k])dup++;else neu++});
+function impPreview(){const list=impList(),ex=keyCounts(),ea=altCounts(),seen={},sa={};let neu=0,dup=0;list.forEach(t=>{const k=txKey(t),a=altKey(t);seen[k]=(seen[k]||0)+1;sa[a]=(sa[a]||0)+1;if((ex[k]||0)>=seen[k]||(t.purpose&&(ea[a]||0)>=sa[a]))dup++;else neu++});
   if(!list.length)return '<p class="neg">Es wurde keine Buchung erkannt. Öffne „Spalten prüfen“ und wähle Datum und Betrag.</p>';
   return '<section class="tiles3 two"><div><span>Neu</span><b class="num">'+neu+'</b></div><div><span>Schon vorhanden</span><b class="num">'+dup+'</b></div></section><div class="elist">'+list.slice(0,3).map(t=>'<div class="erow"><span><b>'+esc(t.name||'–')+'</b><small>'+dfmt(t.date)+' · '+esc(t.purpose.slice(0,50))+'</small></span><span class="num '+(t.amount<0?'neg':'pos')+'">'+eur(t.amount)+'</span></div>').join('')+'</div>'}
 function showImport(){if(imp.pdf)return showPdfImport();
@@ -772,9 +789,9 @@ function showImport(){if(imp.pdf)return showPdfImport();
 }
 function dedupeExcel(tx){const m=tx.forMonth||monthOf(tx.date);const i=S.txs.findIndex(x=>x.src==='excel'&&x.type==='rent'&&x.unitId===tx.unitId&&x.forMonth===m);if(i>=0)S.txs.splice(i,1)}
 function doImport(){
-  const acc=$('#f-iacc').value;ui.lastAcc=acc;const list=impList(),ex=keyCounts(),seen={};let added=0,dup=0,auto=0;
+  const acc=$('#f-iacc').value;ui.lastAcc=acc;const list=impList(),ex=keyCounts(),ea=altCounts(),sa={},seen={};let added=0,dup=0,auto=0;
   const bused=new Set();
-  for(const t of list){const k=txKey(t);seen[k]=(seen[k]||0)+1;if((ex[k]||0)>=seen[k]){dup++;continue}
+  for(const t of list){const k=txKey(t),ak=altKey(t);seen[k]=(seen[k]||0)+1;sa[ak]=(sa[ak]||0)+1;if((ex[k]||0)>=seen[k]||(t.purpose&&(ea[ak]||0)>=sa[ak])){dup++;continue}
     {const m=typeof bkFuzzy==='function'&&bkFuzzy(acc,t.amount,t.date,bused,y=>!!y.ebid&&!y.pdfMatched);if(m){bused.add(m.id);m.pdfMatched=1;dup++;continue}}
     const tx={id:uid(),key:k,date:t.date,amount:t.amount,name:t.name,iban:t.iban,purpose:t.purpose,type:'open',unitId:'',propertyId:'',category:'',forMonth:'',accountId:acc};
     if(autoAssign2(tx)){auto++;if(tx.type==='rent')dedupeExcel(tx)}S.txs.push(tx);added++}
@@ -896,7 +913,7 @@ document.addEventListener('input',e=>{if(e.target.id==='txq'){ui.q=e.target.valu
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
 window.addEventListener('hashchange',()=>{render();window.scrollTo(0,0)});
-let S0=null;(async()=>{S=await loadState();applyLang();S.txs.forEach(t=>{if(t.type==='open')autoAssign2(t)});if(needAuth())showAuth('login');else if(S.settings.lock&&!recentUnlock())showLock();else{render();runGo()}try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}})();
+let S0=null;(async()=>{S=await loadState();applyLang();mig11();S.txs.forEach(t=>{if(t.type==='open')autoAssign2(t)});if(needAuth())showAuth('login');else if(S.settings.lock&&!recentUnlock())showLock();else{render();runGo()}try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}})();
 try{const y=+sessionStorage.getItem('scrollY');if(y)window.scrollTo(0,y);sessionStorage.removeItem('scrollY')}catch(e){}
 
 /* ---------- Sprachen: [Deutsch, English, Hrvatski] ---------- */
