@@ -515,7 +515,7 @@ function vImmo(){
   const objs=S.props.map(p=>{const inc=S.txs.filter(t=>t.type==='rent'&&(t.forMonth||t.date).startsWith(y)&&(unitOf(t.unitId)||{}).propertyId===p.id).reduce((a,t)=>a+t.amount,0);const out=-ex.filter(t=>t.propertyId===p.id).reduce((a,t)=>a+t.amount,0);return {p,inc,out}});
   return '<div class="h2row"><h2>Immobilien</h2><button class="primary" data-act="addUnit">+ Einheit</button></div>'+immoSeg()+monthBar()
   +'<section class="hero"><div class="hl">Miete eingegangen</div><div class="hv num">'+eur(got)+' <span>von '+eur(exp)+'</span></div><div class="meter"><i style="width:'+pct+'%"></i></div><div class="hsub">'+(miss>0.005?'<span class="neg">Noch offen: '+eur(miss)+'</span>':(exp?'<span class="pos">Alle Mieten sind da</span>':'Keine Miete fällig'))+'</div></section>'
-  +'<div class="list">'+rows.map(r=>'<button class="item" data-act="unit" data-id="'+r.u.id+'"><span class="it"><strong>'+esc(unitLabel(r.u))+'</strong><small>'+esc(r.u.tenant||'–')+'</small></span><span class="ir"><span class="num">'+eur(r.s.got)+' / '+eur(r.s.exp)+'</span>'+pill(r.s.st)+'</span></button>').join('')
+  +'<div class="list" data-sort="units">'+rows.map(r=>'<button class="item" data-act="unit" data-id="'+r.u.id+'"><span class="it"><strong>'+esc(unitLabel(r.u))+'</strong><small>'+esc(r.u.tenant||'–')+'</small></span><span class="ir"><span class="num">'+eur(r.s.got)+' / '+eur(r.s.exp)+'</span>'+pill(r.s.st)+'</span></button>').join('')
   +others.map(u=>'<button class="item dim" data-act="unit" data-id="'+u.id+'"><span class="it"><strong>'+esc(unitLabel(u))+'</strong><small>'+esc(u.tenant||'Leer')+'</small></span><span class="ir">'+pill('none')+'</span></button>').join('')+'</div>'
   +'<div class="h2row" style="margin-top:8px"><h3>Ergebnis '+y+'</h3><div class="mbar sm"><button class="ic" data-act="yearPrev" aria-label="Vorjahr">‹</button><button class="ic" data-act="yearNext" aria-label="Nächstes Jahr">›</button></div></div>'
   +objs.map(o=>'<details class="obj"><summary><span class="it"><strong>'+esc(o.p.name)+'</strong><small>Miete '+eur(o.inc)+' · Ausgaben '+eur(o.out)+'</small></span><span class="num big '+(o.inc-o.out<0?'neg':'pos')+'">'+eur(o.inc-o.out)+'</span></summary>'+expDetail(ex.filter(t=>t.propertyId===o.p.id))+'</details>').join('')
@@ -583,9 +583,9 @@ function vKonten(){
   const groups=Object.keys(ACC_TYPES).map(k=>[k,S.accounts.filter(a=>(a.type||'sonst')===k)]).filter(g=>g[1].length);
   return '<div class="h2row"><h2>Konten</h2><button class="primary" data-act="addAcc">+ Konto</button></div>'
   +'<section class="hero"><div class="hl">Guthaben gesamt</div><div class="hv num">'+eur(Math.round(accTotal()))+'</div><div class="hsub muted">Bank und Bargeld</div></section>'
-  +(groups.length?groups.map(([k,l])=>'<section class="group"><h3 class="gt">'+ACC_TYPES[k]+'</h3><div class="list">'+l.map(a=>{const v=accValue(a);return '<button class="item" data-act="acc" data-id="'+a.id+'"><span class="it"><strong>'+esc(a.name)+'</strong><small>'+(v?'Stand '+dfmt(v.date):'Noch kein Stand')+'</small></span><span class="ir"><span class="num big">'+eur(v?v.value:0)+'</span></span></button>'}).join('')+'</div></section>').join(''):'<div class="empty">Noch kein Konto angelegt.</div>')
+  +(groups.length?groups.map(([k,l])=>'<section class="group"><h3 class="gt">'+ACC_TYPES[k]+'</h3><div class="list" data-sort="accounts">'+l.map(a=>{const v=accValue(a);return '<button class="item" data-act="acc" data-id="'+a.id+'"><span class="it"><strong>'+esc(a.name)+'</strong><small>'+(v?'Stand '+dfmt(v.date):'Noch kein Stand')+'</small></span><span class="ir"><span class="num big">'+eur(v?v.value:0)+'</span></span></button>'}).join('')+'</div></section>').join(''):'<div class="empty">Noch kein Konto angelegt.</div>')
   +((()=>{const LA=loans(),LO=LA.filter(o=>Math.abs(o.open)>=0.01),LD=LA.filter(o=>Math.abs(o.open)<0.01),LS=ui.showRepaid?LA:LO;return (LO.length||ui.showRepaid)?'<section class="group"><h3 class="gt">Verliehenes Geld</h3>'+(LS.length?'<div class="list">'+LS.map(o=>'<button class="item loan" data-act="loanList" data-k="'+esc(nrm(o.p))+'"><span class="it"><strong>'+esc(o.p)+'</strong><small>'+(Math.abs(o.open)<0.01?'Komplett zurückgezahlt':o.open>0?'Schuldet dir noch':'Du schuldest')+' · '+o.l.length+' Buchungen</small></span><span class="ir"><span class="num big '+(Math.abs(o.open)<0.01?'pos':'')+'">'+eur(Math.abs(Math.round(o.open*100)/100))+'</span></span></button>').join('')+'</div>':'')+(LD.length?'<button class="small link" data-act="toggleRepaid">'+(ui.showRepaid?'Zurückgezahlte ausblenden':'Zurückgezahlte anzeigen ('+LD.length+')')+'</button>':'')+'</section>':''})())
-  +'<p class="hint">'+(S.bank&&S.bank.conns&&S.bank.conns.length?'Kontostände verbundener Banken kommen automatisch. Andere Konten antippen und den Stand eintragen.':'Tippe auf ein Konto, um den aktuellen Stand einzutragen.')+'</p>';
+  +'<p class="hint">'+(S.bank&&S.bank.conns&&S.bank.conns.length?'Kontostände verbundener Banken kommen automatisch. Andere Konten antippen und den Stand eintragen.':'Tippe auf ein Konto, um den aktuellen Stand einzutragen.')+'<br><span>'+(S.accounts.length>1?'Zum Sortieren lange gedrückt halten und ziehen.':'')+'</span></p>';
 }
 function accDetail(id){
   const a=accOf(id);if(!a)return;const h=(a.history||[]).slice().sort((x,y)=>y.date.localeCompare(x.date));
@@ -1205,3 +1205,26 @@ I18N.push(['Kontostände verbundener Banken kommen automatisch. Andere Konten an
   closeModal=function(){_c();if(mh)setTimeout(()=>{if(mh&&$('#modal').hidden){mh=false;if(history.state&&history.state.djcModal)history.back()}},0)};
   window.addEventListener('popstate',()=>{if(mh){mh=false;if(!$('#modal').hidden)_c()}});
 }
+
+/* ---------- Reihenfolge per langem Drücken ändern (Konten, Einheiten) ---------- */
+{let st=null,drag=null,eatClick=false;
+  const items=c=>[...c.children].filter(x=>x.dataset&&x.dataset.id);
+  const cancel=()=>{if(st){clearTimeout(st.t);st=null}};
+  document.addEventListener('pointerdown',e=>{const it=e.target.closest('[data-sort] > [data-id]');if(!it||e.button>0)return;cancel();
+    st={it,x:e.clientX,y:e.clientY,id:e.pointerId,t:setTimeout(()=>{const c=it.parentNode;if(items(c).length<2){st=null;return}
+      drag={it,c,list:c.dataset.sort};st=null;it.classList.add('dragging');document.body.classList.add('sorting');try{navigator.vibrate&&navigator.vibrate(25)}catch(_){}},450)}});
+  document.addEventListener('pointermove',e=>{if(st&&(Math.abs(e.clientX-st.x)>8||Math.abs(e.clientY-st.y)>8))cancel();
+    if(!drag)return;e.preventDefault();const L=items(drag.c);
+    const O=L.filter(o=>o!==drag.it);let k=O.findIndex(o=>{const r=o.getBoundingClientRect();return e.clientY<r.top+r.height/2});
+    const ref=k<0?(O.length?O[O.length-1].nextSibling:null):O[k];if(ref!==drag.it&&drag.it.nextSibling!==ref)drag.c.insertBefore(drag.it,ref);
+    const vh=window.innerHeight;if(e.clientY<80)window.scrollBy(0,-12);else if(e.clientY>vh-120)window.scrollBy(0,12)},{passive:false});
+  document.addEventListener('touchmove',e=>{if(drag)e.preventDefault()},{passive:false});
+  const end=()=>{cancel();if(!drag)return;const d=drag;drag=null;d.it.classList.remove('dragging');document.body.classList.remove('sorting');eatClick=true;setTimeout(()=>eatClick=false,400);
+    const ids=items(d.c).map(x=>x.dataset.id),arr=d.list==='accounts'?S.accounts:d.list==='units'?S.units:null;if(!arr)return;
+    const pos=arr.map((x,i)=>ids.includes(x.id)?i:-1).filter(i=>i>=0),moved=ids.map(id=>arr.find(x=>x.id===id)).filter(Boolean);
+    if(moved.length!==pos.length)return;pos.forEach((p,k)=>arr[p]=moved[k]);save();render();toast('Reihenfolge gespeichert.')};
+  document.addEventListener('pointerup',end);document.addEventListener('pointercancel',end);
+  document.addEventListener('click',e=>{if(eatClick){e.stopPropagation();e.preventDefault();eatClick=false}},true);
+  document.addEventListener('contextmenu',e=>{if(e.target.closest('[data-sort] > [data-id]'))e.preventDefault()});
+}
+I18N.push(['Reihenfolge gespeichert.','Order saved.','Redoslijed spremljen.'],['Zum Sortieren lange gedrückt halten und ziehen.','Press and hold, then drag to reorder.','Za razvrstavanje drži pritisnuto i povuci.']);
