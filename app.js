@@ -584,8 +584,8 @@ function vKonten(){
   return '<div class="h2row"><h2>Konten</h2><button class="primary" data-act="addAcc">+ Konto</button></div>'
   +'<section class="hero"><div class="hl">Guthaben gesamt</div><div class="hv num">'+eur(Math.round(accTotal()))+'</div><div class="hsub muted">Bank und Bargeld</div></section>'
   +(groups.length?groups.map(([k,l])=>'<section class="group"><h3 class="gt">'+ACC_TYPES[k]+'</h3><div class="list">'+l.map(a=>{const v=accValue(a);return '<button class="item" data-act="acc" data-id="'+a.id+'"><span class="it"><strong>'+esc(a.name)+'</strong><small>'+(v?'Stand '+dfmt(v.date):'Noch kein Stand')+'</small></span><span class="ir"><span class="num big">'+eur(v?v.value:0)+'</span></span></button>'}).join('')+'</div></section>').join(''):'<div class="empty">Noch kein Konto angelegt.</div>')
-  +(loans().length?'<section class="group"><h3 class="gt">Verliehenes Geld</h3><div class="list">'+loans().map(o=>'<button class="item loan" data-act="loanList" data-k="'+esc(nrm(o.p))+'"><span class="it"><strong>'+esc(o.p)+'</strong><small>'+(Math.abs(o.open)<0.01?'Komplett zurückgezahlt':o.open>0?'Schuldet dir noch':'Du schuldest')+' · '+o.l.length+' Buchungen</small></span><span class="ir"><span class="num big '+(Math.abs(o.open)<0.01?'pos':'')+'">'+eur(Math.abs(Math.round(o.open*100)/100))+'</span></span></button>').join('')+'</div></section>':'')
-  +'<p class="hint">Tippe auf ein Konto, um den aktuellen Stand einzutragen. Die App darf keine Kurse oder Kontostände aus dem Internet holen.</p>';
+  +((()=>{const LA=loans(),LO=LA.filter(o=>Math.abs(o.open)>=0.01),LD=LA.filter(o=>Math.abs(o.open)<0.01),LS=ui.showRepaid?LA:LO;return (LO.length||ui.showRepaid)?'<section class="group"><h3 class="gt">Verliehenes Geld</h3>'+(LS.length?'<div class="list">'+LS.map(o=>'<button class="item loan" data-act="loanList" data-k="'+esc(nrm(o.p))+'"><span class="it"><strong>'+esc(o.p)+'</strong><small>'+(Math.abs(o.open)<0.01?'Komplett zurückgezahlt':o.open>0?'Schuldet dir noch':'Du schuldest')+' · '+o.l.length+' Buchungen</small></span><span class="ir"><span class="num big '+(Math.abs(o.open)<0.01?'pos':'')+'">'+eur(Math.abs(Math.round(o.open*100)/100))+'</span></span></button>').join('')+'</div>':'')+(LD.length?'<button class="small link" data-act="toggleRepaid">'+(ui.showRepaid?'Zurückgezahlte ausblenden':'Zurückgezahlte anzeigen ('+LD.length+')')+'</button>':'')+'</section>':''})())
+  +'<p class="hint">'+(S.bank&&S.bank.conns&&S.bank.conns.length?'Kontostände verbundener Banken kommen automatisch. Andere Konten antippen und den Stand eintragen.':'Tippe auf ein Konto, um den aktuellen Stand einzutragen.')+'</p>';
 }
 function accDetail(id){
   const a=accOf(id);if(!a)return;const h=(a.history||[]).slice().sort((x,y)=>y.date.localeCompare(x.date));
@@ -831,6 +831,7 @@ document.addEventListener('click',e=>{
   case 'perList':{const pk=b.dataset.p,inc=b.dataset.k==='inc';listDlg(inc?'Einnahmen':'Ausgaben',periodLabel(pk),periodTx(pk).filter(t=>inc?isInc(t):t.type==='expense'),true);return}
   case 'tipsSave':saveTips();return;
   case 'tipsCash':cashTips();return;
+  case 'toggleRepaid':ui.showRepaid=!ui.showRepaid;saveUi();render();return;
   case 'loanList':{const o=loans().find(x=>nrm(x.p)===b.dataset.k);if(o)listDlg('Darlehen '+o.p,'Offen '+eur(Math.round(o.open*100)/100),o.l,false);return}
   case 'meter':meterDlg(id);return;
   case 'addMeterDev':meterDevDlg();return;case 'editMeterDev':meterDevDlg(id);return;
@@ -1067,7 +1068,7 @@ function bkSection(){const b=bk();const T=todayISO();
     +(bkReady()?(b.conns.length?'<div class="elist">'+conns+'</div>':'<p class="hint">Noch keine Bank verbunden.</p>')
       +'<div class="form"><button class="primary" data-act="bkFetch">Umsätze abrufen</button><button data-act="bkConnect">+ Bank verbinden</button></div>'
       +(b.lastFetch?'<p class="hint">Zuletzt abgerufen: '+dfmt(new Date(b.lastFetch).toISOString().slice(0,10))+' '+new Date(b.lastFetch).toTimeString().slice(0,5)+'</p>':'')
-      +'<details class="cols"'+(b.conns.length?'':' open')+'><summary>Einstellungen</summary>'+bkSetupForm()+'</details>'
+      +'<details class="bkset"'+(b.conns.length?'':' open')+'><summary>Einstellungen</summary>'+bkSetupForm()+'</details>'
       :'<p class="hint">Holt Umsätze und Kontostände direkt von der Bank. Dafür brauchst du einmalig ein kostenloses Konto bei Enable Banking und einen eigenen Vermittler bei Cloudflare.</p>'+bkSetupForm())
     +'</section>'}
 function bkSetupForm(){const b=bk();return '<label>Adresse des Vermittlers<input id="f-bkurl" value="'+esc(b.url||'')+'" placeholder="https://djc-bank.….workers.dev" inputmode="url"></label>'
@@ -1193,3 +1194,14 @@ PREFIX.push(['Verbunden bis ','Connected until ','Povezano do '],['Zuletzt abger
 I18N.push(['Läuft am {n} ab, bitte neu verbinden','Expires on {n}, please reconnect','Ističe {n}, poveži ponovno']);
 
 I18N.push(['{n} Konten','{n} accounts','{n} računa'],['{n} Konto','{n} account','{n} račun']);
+
+I18N.push(['Zurückgezahlte ausblenden','Hide repaid','Sakrij vraćeno'],['Zurückgezahlte anzeigen ({n})','Show repaid ({n})','Prikaži vraćeno ({n})']);
+
+I18N.push(['Kontostände verbundener Banken kommen automatisch. Andere Konten antippen und den Stand eintragen.','Balances of connected banks update automatically. Tap other accounts to enter the balance.','Stanja povezanih banaka dolaze automatski. Ostale račune dodirni i unesi stanje.'],['Tippe auf ein Konto, um den aktuellen Stand einzutragen.','Tap an account to enter the current balance.','Dodirni račun za unos trenutnog stanja.']);
+
+/* ---------- Zurück-Taste des Handys schließt offene Fenster ---------- */
+{let mh=false;const _m=modal,_c=closeModal;
+  modal=function(html){_m(html);if(!mh){mh=true;try{history.pushState({djcModal:1},'',location.href)}catch(e){}}};
+  closeModal=function(){_c();if(mh)setTimeout(()=>{if(mh&&$('#modal').hidden){mh=false;if(history.state&&history.state.djcModal)history.back()}},0)};
+  window.addEventListener('popstate',()=>{if(mh){mh=false;if(!$('#modal').hidden)_c()}});
+}
