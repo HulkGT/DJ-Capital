@@ -165,9 +165,16 @@ async function lockAvailable(){try{return !!(window.PublicKeyCredential&&await P
 async function lockEnable(){const c=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'DJ Capital'},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:'djcapital',displayName:'DJ Capital'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'discouraged'},timeout:60000}});S.settings.lock=b64(c.rawId);await doSave()}
 async function lockVerify(){await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:unb64(S.settings.lock)}],userVerification:'required',timeout:60000}})}
 let locked=false,hiddenAt=0;
-function showLock(){locked=true;closeModal();$('#root').innerHTML='<div class="lock"><div class="logo big" aria-hidden="true"><span>DJ</span></div><h2>DJ Capital</h2><p class="hint">Gesperrt. Entsperre mit Fingerabdruck oder Gesichtserkennung.</p><button class="primary" data-act="unlock">Entsperren</button></div>'}
-async function unlock(){try{await lockVerify();locked=false;render();runGo()}catch(e){toast('Entsperren abgebrochen. Bitte erneut versuchen.')}}
-document.addEventListener('visibilitychange',()=>{if(document.hidden)hiddenAt=Date.now();else if(S&&S.settings&&S.settings.lock&&!locked&&Date.now()-hiddenAt>60000)showLock()});
+/* Neu laden (z. B. nach unten ziehen) innerhalb einer Minute fragt nicht erneut */
+function markUnlocked(){try{localStorage.setItem('djc-unl',String(Date.now()))}catch(e){}}
+function recentUnlock(){try{return Date.now()-(+localStorage.getItem('djc-unl')||0)<60000}catch(e){return false}}
+setInterval(()=>{if(!locked&&!document.hidden&&S&&S.settings&&S.settings.lock)markUnlocked()},15000);
+window.addEventListener('pagehide',()=>{if(!locked&&S&&S.settings&&S.settings.lock&&!document.hidden)markUnlocked()});
+function showLock(){locked=true;closeModal();$('#root').innerHTML='<div class="lock"><div class="logo big" aria-hidden="true"><span>DJ</span></div><h2>DJ Capital</h2><p class="hint">Gesperrt. Entsperre mit Fingerabdruck oder Gesichtserkennung.</p><button class="primary" data-act="unlock">Entsperren</button></div>';autoUnlock()}
+let unlocking=false;
+function autoUnlock(){const go=()=>{if(locked&&!unlocking&&!document.hidden)unlock(true)};if(document.hasFocus())setTimeout(go,150);else window.addEventListener('focus',()=>setTimeout(go,150),{once:true})}
+async function unlock(auto){if(unlocking)return;unlocking=true;try{await lockVerify();locked=false;markUnlocked();render();runGo()}catch(e){if(!auto)toast('Entsperren abgebrochen. Bitte erneut versuchen.')}finally{unlocking=false}}
+document.addEventListener('visibilitychange',()=>{if(document.hidden){hiddenAt=Date.now();if(!locked&&S&&S.settings&&S.settings.lock)markUnlocked()}else if(S&&S.settings&&S.settings.lock&&!locked&&Date.now()-hiddenAt>60000)showLock()});
 /* ---------- Hilfen ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -889,7 +896,7 @@ document.addEventListener('input',e=>{if(e.target.id==='txq'){ui.q=e.target.valu
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
 window.addEventListener('hashchange',()=>{render();window.scrollTo(0,0)});
-let S0=null;(async()=>{S=await loadState();applyLang();S.txs.forEach(t=>{if(t.type==='open')autoAssign2(t)});if(S.settings.lock)showLock();else{render();runGo()}try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}})();
+let S0=null;(async()=>{S=await loadState();applyLang();S.txs.forEach(t=>{if(t.type==='open')autoAssign2(t)});if(S.settings.lock&&!recentUnlock())showLock();else{render();runGo()}try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}})();
 try{const y=+sessionStorage.getItem('scrollY');if(y)window.scrollTo(0,y);sessionStorage.removeItem('scrollY')}catch(e){}
 
 /* ---------- Sprachen: [Deutsch, English, Hrvatski] ---------- */
