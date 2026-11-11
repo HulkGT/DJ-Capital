@@ -10,8 +10,71 @@
   "background_color": "#0b0d12",
   "theme_color": "#0b0d12",
   "icons": [
-    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
-    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Kontoauszug hochladen",
+      "short_name": "Auszug",
+      "url": "./?go=upload",
+      "icons": [
+        {
+          "src": "sc-upload.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Beleg fotografieren",
+      "short_name": "Beleg",
+      "url": "./?go=beleg",
+      "icons": [
+        {
+          "src": "sc-beleg.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Ausgabe eintragen",
+      "short_name": "Ausgabe",
+      "url": "./?go=ausgabe",
+      "icons": [
+        {
+          "src": "sc-ausgabe.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Mieten ansehen",
+      "short_name": "Mieten",
+      "url": "./?go=miete",
+      "icons": [
+        {
+          "src": "sc-miete.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

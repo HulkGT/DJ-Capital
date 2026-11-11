@@ -128,65 +128,17 @@ const ACC_TYPES={bank:'Bankkonto',bar:'Bargeld',depot:'Depot',sonst:'Sonstiges'}
 const LSKEY='jozic-v3';
 let S=null;
 function migrate(s){
-  ['props','units','txs','rules','accounts'].forEach(k=>s[k]=s[k]||[]);
+  ['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders'].forEach(k=>s[k]=s[k]||[]);
   if(!s.cats||!s.cats.length)s.cats=EXP_CATS.slice();
   if(!s.icats||!s.icats.length)s.icats=INC_CATS.slice();
-  if((s.v||0)<3){
-    EXP_CATS.forEach(c=>{if(!s.cats.includes(c))s.cats.push(c)});
-    const val={p_ben:[260000,'Kaufpreis 250.000 € (2010) + Dvorište 10.000 € (2024)'],p_med:[80000,'Kaufpreis (2019)']};
-    s.props.forEach(p=>{if(p.value==null&&val[p.id]){p.value=val[p.id][0];p.valueNote=val[p.id][1]}});
-    if(!s.accounts.length){
-      const mk=(id,name,type,vals,cur)=>{const h=[];['2023','2024','2025'].forEach((y,i)=>{if(vals[i]!=null)h.push({date:y+'-12-31',value:vals[i]})});if(cur!=null)h.push({date:'2026-11-01',value:cur});return {id,name,type,history:h,note:'Werte aus der Excel (Stand je 31.12.)'}};
-      s.accounts=[mk('a_rba','RBA','bank',[16455,3531,8996],14000),mk('a_san','Santander','bank',[14808,39700,7000],6000),mk('a_dkb','Deutsche Kreditbank (DKB)','bank',[12020,17819,10900],40000),mk('a_cry','Krypto','krypto',[50951,123000,122000],null)];
-    }
-    s.v=3;
-  }
-  if(s.v<4){
-    s.accounts=s.accounts.filter(a=>a.type!=='krypto');
-    s.units.forEach(u=>{if(u.id==='u_bd'&&u.tenant==='Saini'){u.tenant='';u.note='Saini hat Dvorište bis Oktober 2026 gemietet (zusammen mit dem 1. Kat bezahlt, Oktober war die letzte Zahlung). Kaution 1300 € (Interspar).'}});
-    const P=(propertyId,title,prio,year,est,note)=>({id:uid(),propertyId,title,prio,year,est,act:null,status:'Geplant',note:note||''});
-    if(!s.plans)s.plans=[P('p_ben','Glasfaser ans Haus anschließen','Mittel',2027,1000),P('p_ben','Neue Sprechanlage (Tuya)','Mittel',2027,600),P('p_ben','Rollos auf Elektro umrüsten (Tuya), Prizemlje','Mittel',2027,600),P('p_ben','Sonnenschutzsegel über dem Hof','Mittel',2028,1000),P('p_ben','Rollos auf Elektro umrüsten (Tuya), 1. Kat','Mittel',2028,700),P('p_ben','Lüftung (unten Eingangsbereich, Waschküche/WC oben)','Hoch',2028,1500),P('p_ben','Rollos auf Elektro umrüsten (Tuya), 2. Kat','Mittel',2029,800),P('p_med','Rollos auf Elektro umrüsten (Tuya)','Niedrig',2028,null)];
-    if(!s.reserve)s.reserve={startYear:2027,yearly:4140,target:22888,special:{},note:'Neustart ab 2027. Zielwert = 10-Jahres-Puffer (Hausgeld 2 % + Wohngeld 5 % vom Gewinn über 10 Jahre).'};
-    const F=(propertyId,title,amount,perYear)=>({id:uid(),propertyId,title,amount,perYear});
-    if(!s.fixcosts)s.fixcosts=[F('p_ben','Komunalna naknada 1. Kat',111,1),F('p_ben','Komunalna naknada 2. Kat',132.15,1),F('p_ben','Komunalna naknada Prizemlje',85.8,1),F('p_ben','HRT',10.62,12),F('p_ben','Osiguranje Allianz',749.47,1),F('p_ben','Klima-Service (3 Geräte)',50,3),F('p_ben','Odvoz smeća',35,12),F('p_med','Osiguranje Allianz',278.22,1),F('p_med','Klima-Service (3 Geräte)',50,3),F('p_med','Odvoz smeća',35,12),F('p_med','Komunalna naknada',9.14,12)];
-    if(!s.devices){s.devices=[];const D={u_med:{TV:'',Kühlschrank:'2019',Ofen:'2019',Kochfeld:'2019',Boiler:'2019, neu 2026','Wasserpumpe':'2018',Waschmaschine:'2019'},u_b1:{TV:'2012',Kühlschrank:'2014',Ofen:'2014',Kochfeld:'2014',Boiler:'2014, neu 2024',Waschmaschine:'2014',Spülmaschine:'2020','Neue Dusche':'2025','Smart-Lock-Schlüssel':'2 Stück'},u_b2:{TV:'2019',Kühlschrank:'2019',Ofen:'2019',Kochfeld:'2019',Boiler:'2014, neu 2024',Waschmaschine:'2018','Neue Dusche':'2026','Smart-Lock-Schlüssel':'4 Stück'},u_bd:{Kühlschrank:'2023',Kochfeld:'2023',Boiler:'2023','Überdachung (Nadstrešnica)':'2023','Smart-Lock-Schlüssel':'1 Stück'},u_bp:{TV:'2016',Kühlschrank:'2022',Ofen:'2022',Kochfeld:'2022',Boiler:'2008',Waschmaschine:'2008'}};
-      Object.entries(D).forEach(([u,o])=>Object.entries(o).forEach(([n,y])=>{if(y)s.devices.push({id:uid(),unitId:u,name:n,year:y})}))}
-    if(!s.meters)s.meters=[{id:uid(),propertyId:'p_ben',title:'Hauptzähler Wasser (Glavni sat)',value:'4225',date:'2026-08-12'},{id:uid(),propertyId:'p_ben',title:'Neuer Zähler Waschküche',value:'59',date:'2026-08-12'}];
-    s.props.forEach(p=>{if(p.id==='p_ben'&&!p.buy){p.buy=[{year:2010,price:250000,what:'Haus'},{year:2024,price:10000,what:'Dvorište'}]}if(p.id==='p_med'&&!p.buy)p.buy=[{year:2019,price:80000,what:'Haus'}]});
-    if(!s.taxRate)s.taxRate={base:0.7,rate:0.12};
-    if(!s.notes)s.notes=[
-      {title:'Steuer Kroatien (Najam)',text:'Mieteinnahmen sind nach dem Zakon o PDV-u, Čl. 40 Točka L von der Mehrwertsteuer befreit. Besteuert wird nur nach dem Zakon o porezu na dohodak, pauschal: Čl. 5/3 Najam ist dohodak od imovine. Čl. 12/5 dohodak od imovine ist konačni dohodak, daher gibt es keine Grenze von 60.000 €. Čl. 57: Porez wird pauschal nach Rješenje der Porezna uprava gezahlt, nach dem Ort der Immobilie.'},
-      {title:'Porezna uprava Slavonski Brod',text:'E-Mail: Slavonskib_ipu_pis@porezna-uprava.hr\nTelefon: 035 213 250 (für alle Infos)'},
-      {title:'Vertrag oder Kündigung melden (ePorezna)',text:'1. In ePorezna anmelden → Zahtjevi\n2. RPO auswählen, ausfüllen und senden\n3. Nach dem Senden erscheint „Dodaj priloge“\n4. Ugovor o najmu oder Raskid ugovora hochladen\nGilt für neue Verträge und für Kündigungen.'},
-      {title:'Steuer Deutschland',text:'§ 32b Abs. 1 Satz 2 Nr. 3 EStG: Einkünfte aus der Vermietung von unbeweglichem Vermögen sind vom Progressionsvorbehalt ausgenommen, wenn die Immobilie nicht in einem Drittstaat liegt. Kroatien ist EU, also kein Drittstaat.'},
-      {title:'Verträge',text:'Verträge verlängern sich automatisch um 6 Monate, wenn nicht gekündigt wird.'}];
-    s.v=4;
-  }
-  if(s.v<5){
-    const T='2026-11-11';
-    const r=s.accounts.find(a=>a.id==='a_rba');
-    if(r){r.name='RBA Privat';r.iban='HR2424840083235189895';r.note='Bis Oktober 2026 waren in der Excel beide RBA-Konten zusammen erfasst.';r.history=(r.history||[]).filter(h=>h.date!==T&&h.date!=='2026-11-01');r.history.push({date:T,value:13719.66})}
-    if(!s.accounts.some(a=>a.id==='a_rba2'))s.accounts.push({id:'a_rba2',name:'RBA Mieteinnahmen',type:'bank',iban:'HR4724840083116974611',note:'Konto für die Mieteinnahmen',history:[{date:T,value:4798.01}]});
-    const d=s.accounts.find(a=>a.id==='a_dkb');if(d&&!d.iban)d.iban='DE92120300001200090528';
-    const sa=s.accounts.find(a=>a.id==='a_san');if(sa&&!sa.iban)sa.iban='DE86500333009100376760';
-    s.v=5;
-  }
-  if(s.v<6){
+  if((s.v||0)<10){
     ['Werbung & Marketing (Firma)','Mobilität','Kreditkarte','Fitness & Sport','Online-Shopping'].forEach(c=>{if(!s.cats.includes(c))s.cats.push(c)});
     ['Kindergeld','Krankenkasse','Steuererstattung'].forEach(c=>{if(!s.icats.includes(c))s.icats.push(c)});
-    s.txs.forEach(t=>{
-      if(t.id==='cf9y7vf8'){t.type='loan';t.category='';t.person='Enes Ceylan'}
-      if(t.id==='m1iipb0k'){t.type='loan';t.category='';t.person='Enes Ceylan';t.name='Enes Ceylan'}
-      if(t.type==='expense'&&/meta platforms/i.test(t.name||'')){t.category='Werbung & Marketing (Firma)'}
-    });
-    if(s.meters&&!s.meterDevs){s.meterDevs=s.meters.map(m=>({id:m.id,propertyId:m.propertyId,kind:'Wasser',number:'',place:/wasch/i.test(m.title)?'Waschküche':'Hauptzähler',readings:[{date:m.date,value:m.value}]}));delete s.meters}
-    s.meterDevs=s.meterDevs||[];
-    s.v=6;
+    if(s.meters){s.meterDevs=s.meterDevs.concat(s.meters.map(m=>({id:m.id,propertyId:m.propertyId,kind:'Wasser',number:'',place:m.title||'',readings:m.value?[{date:m.date,value:m.value}]:[]})));delete s.meters}
+    s.accounts=s.accounts.filter(a=>a.type!=='krypto');
+    s.v=10;
   }
-  if(s.v<9){
-    s.v=9;
-  }
-  if(s.v<10){s.reminders=s.reminders||[];s.settings=s.settings||{remind:true};s.v=10}
+  s.taxRate=s.taxRate||{base:0.7,rate:0.12};s.settings=s.settings||{remind:true};
   return s;
 }
 /* ---------- Speichern (auf dem Gerät) ---------- */
@@ -214,7 +166,7 @@ async function lockEnable(){const c=await navigator.credentials.create({publicKe
 async function lockVerify(){await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:unb64(S.settings.lock)}],userVerification:'required',timeout:60000}})}
 let locked=false,hiddenAt=0;
 function showLock(){locked=true;closeModal();$('#root').innerHTML='<div class="lock"><div class="logo big" aria-hidden="true"><span>DJ</span></div><h2>DJ Capital</h2><p class="hint">Gesperrt. Entsperre mit Fingerabdruck oder Gesichtserkennung.</p><button class="primary" data-act="unlock">Entsperren</button></div>'}
-async function unlock(){try{await lockVerify();locked=false;render()}catch(e){toast('Entsperren abgebrochen. Bitte erneut versuchen.')}}
+async function unlock(){try{await lockVerify();locked=false;render();runGo()}catch(e){toast('Entsperren abgebrochen. Bitte erneut versuchen.')}}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)hiddenAt=Date.now();else if(S&&S.settings&&S.settings.lock&&!locked&&Date.now()-hiddenAt>60000)showLock()});
 /* ---------- Hilfen ---------- */
 const $=s=>document.querySelector(s);
@@ -278,7 +230,7 @@ const remRow=x=>'<div class="rem '+x.lvl+'"><span class="it"><strong>'+esc(x.t)+
 function remindCard(){if(S.settings&&S.settings.remind===false)return '';const L=remindItems();if(!L.length)return '';
   return '<section class="card"><div class="h2row"><h3>Demnächst</h3>'+(L.length>3?'<button class="small" data-act="remAll">Alle ('+L.length+')</button>':'')+'</div><div class="rems">'+L.slice(0,3).map(remRow).join('')+'</div></section>'}
 function remDlg(){const r={title:'',date:todayISO(),repeat:'yearly',lead:30};
-  modal('<h3>Neue Erinnerung</h3><label>Woran?<input id="f-rt" placeholder="z. B. Allianz Versicherung Benčićeva zahlen"></label><div class="grid2"><label>Fällig am<input id="f-rdt" type="date" value="'+r.date+'"></label><label>Wiederholen<select id="f-rrep"><option value="none">Einmalig</option><option value="monthly">Monatlich</option><option value="yearly" selected>Jährlich</option></select></label><label>Vorher anzeigen (Tage)<input id="f-rlead" type="number" min="0" max="365" value="30"></label></div><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveRem">Speichern</button></div>')}
+  modal('<h3>Neue Erinnerung</h3><label>Woran?<input id="f-rt" placeholder="z. B. Gebäudeversicherung zahlen"></label><div class="grid2"><label>Fällig am<input id="f-rdt" type="date" value="'+r.date+'"></label><label>Wiederholen<select id="f-rrep"><option value="none">Einmalig</option><option value="monthly">Monatlich</option><option value="yearly" selected>Jährlich</option></select></label><label>Vorher anzeigen (Tage)<input id="f-rlead" type="number" min="0" max="365" value="30"></label></div><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveRem">Speichern</button></div>')}
 /* ---------- Monatsvergleich ---------- */
 function unusual(ym){
   const cur=byCat(monthTx(ym).filter(t=>t.type==='expense')),prev={};
@@ -934,7 +886,7 @@ document.addEventListener('input',e=>{if(e.target.id==='txq'){ui.q=e.target.valu
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
 window.addEventListener('hashchange',()=>{render();window.scrollTo(0,0)});
-let S0=null;(async()=>{S=await loadState();applyLang();S.txs.forEach(t=>{if(t.type==='open')autoAssign2(t)});if(S.settings.lock)showLock();else render();try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}})();
+let S0=null;(async()=>{S=await loadState();applyLang();S.txs.forEach(t=>{if(t.type==='open')autoAssign2(t)});if(S.settings.lock)showLock();else{render();runGo()}try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}})();
 try{const y=+sessionStorage.getItem('scrollY');if(y)window.scrollTo(0,y);sessionStorage.removeItem('scrollY')}catch(e){}
 
 /* ---------- Sprachen: [Deutsch, English, Hrvatski] ---------- */
@@ -1031,7 +983,7 @@ const I18N=[
 const PREFIX=[['Kündigungsfrist ','Notice deadline ','Otkazni rok '],['Vertragsende ','Contract end ','Kraj ugovora '],['Mieterwechsel ','Tenant change ','Promjena najmoprimca '],['Fixkosten ','Fixed costs ','Fiksni troškovi '],['Geräte ','Appliances ','Uređaji '],['Immobilie: ','Property: ','Nekretnina: '],['Darlehen ','Loan ','Zajam '],['Miete ','Rent ','Najam '],['Auszug ','Move-out ','Iseljenje '],['Einzug ','Move-in ','Useljenje '],['Offen ','Open ','Otvoreno '],['Privat · ','Private · ','Privatno · '],['Rollos auf Elektro umrüsten (Tuya), ','Convert blinds to electric (Tuya), ','Rolete na električne (Tuya), ']];
 I18N.push(['Jahresbericht {n}','Annual report {n}','Godišnji izvještaj {n}'],['Einheit','Unit','Jedinica'],['Monate bezahlt','Months paid','Plaćeni mjeseci'],['Mieteinnahmen','Rental income','Prihod od najma'],['Summe Mieten','Total rent','Ukupno najam'],['Summe Ausgaben','Total expenses','Ukupno troškovi'],['Betrag','Amount','Iznos'],['Ergebnis vor Steuer','Result before tax','Rezultat prije poreza'],['Steuer geschätzt ({n} auf {n} der Miete)','Estimated tax ({n} on {n} of rent)','Procijenjeni porez ({n} na {n} najma)'],['Immobilien gesamt: Einnahmen {n} · Ausgaben {n}','Properties total: income {n} · expenses {n}','Nekretnine ukupno: primici {n} · troškovi {n}'],['Weitere Einnahmen','Other income','Ostali primici'],['Summe','Total','Ukupno'],['Private Ausgaben nach Kategorie','Private expenses by category','Privatni troškovi po kategoriji'],['zurückgezahlt','repaid','vraćeno'],['offen {n}','open {n}','otvoreno {n}'],['Kontostände','Account balances','Stanja računa'],['Die Steuerwerte sind eine Schätzung aus der App und ersetzen keine Steuerberatung.','Tax figures are an estimate from the app and do not replace tax advice.','Porezni iznosi su procjena aplikacije i ne zamjenjuju porezno savjetovanje.'],[' (Beleg in der App)',' (receipt in app)',' (račun u aplikaciji)']);
 PREFIX.push(['Auffällig in ','Unusual in ','Neuobičajeno u '],['Kontoauszug ','Statement ','Izvadak '],['Stand ','Balance ','Stanje '],['offen ','open ','otvoreno ']);
-I18N.push(['Fixkosten','Fixed costs','Fiksni troškovi'],['z. B. 1. Kat, Keller','e.g. 1st floor, basement','npr. 1. kat, podrum'],['z. B. Allianz Versicherung Benčićeva zahlen','e.g. pay building insurance','npr. platiti osiguranje zgrade'],
+I18N.push(['Fixkosten','Fixed costs','Fiksni troškovi'],['z. B. 1. Kat, Keller','e.g. 1st floor, basement','npr. 1. kat, podrum'],['z. B. Gebäudeversicherung zahlen','e.g. pay building insurance','npr. platiti osiguranje zgrade'],
 ['Zusammen etwa {n} im Monat. Viele kleine Beträge fallen kaum auf. Prüfe, ob sich das lohnt.','Together about {n} per month. Many small amounts go unnoticed. Check whether it is worth it.','Ukupno oko {n} mjesečno. Mnogi mali iznosi jedva se primijete. Provjeri isplati li se.'],
 ['Zusammen etwa {n} im Monat. Viele kleine Beträge fallen kaum auf. Prüfe, ob sich das lohnt und ob die Werbung Kunden bringt.','Together about {n} per month. Many small amounts go unnoticed. Check whether it is worth it and whether the ads bring customers.','Ukupno oko {n} mjesečno. Mnogi mali iznosi jedva se primijete. Provjeri isplati li se i donosi li oglašavanje kupce.'],
 ['Etwa {n} im Monat. Brauchst du das noch, oder gibt es einen günstigeren Tarif?','About {n} per month. Do you still need it, or is there a cheaper plan?','Oko {n} mjesečno. Treba li ti to još ili postoji jeftinija tarifa?'],
@@ -1076,3 +1028,15 @@ let trBusy=false;const trObs=new MutationObserver(ms=>{if(trBusy||LANG==='de')re
 function trStart(){['root','modal','toast'].forEach(id=>{const el=document.getElementById(id);if(el){trObs.observe(el,{childList:true,subtree:true,characterData:true});trNode(el)}})}
 function setLang(v){S.settings=S.settings||{};S.settings.lang=v;try{localStorage.setItem('djc-lang',v)}catch(e){}save();applyLang();render();toast(tr('Gespeichert.'))}
 applyLang();trStart();
+
+/* ---------- Schnellbefehle (langes Drücken aufs App-Symbol) ---------- */
+let GO=null;try{const q=new URLSearchParams(location.search);GO=q.get('go');if(GO)history.replaceState(null,'',location.pathname+location.hash)}catch(e){}
+function runGo(){const g=GO;GO=null;if(!g)return;
+  if(g==='miete'){ui.immo='miete';saveUi();if(location.hash!=='#immo')location.hash='#immo';else render();return}
+  if(location.hash&&location.hash!=='#start'){location.hash='#start'}
+  setTimeout(()=>{
+    if(g==='ausgabe')manualDlg('expense');
+    else if(g==='upload')modal('<h3>Kontoauszug hochladen</h3><p class="hint">PDF oder CSV aus dem Online-Banking</p><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="pickFile">Datei auswählen</button></div>');
+    else if(g==='beleg')modal('<h3>Beleg fotografieren</h3><p class="hint">Foto speichern und Ausgabe eintragen</p><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="pickReceipt">Kamera öffnen</button></div>');
+  },80)}
+I18N.push(['Datei auswählen','Choose file','Odaberi datoteku'],['Kamera öffnen','Open camera','Otvori kameru']);
