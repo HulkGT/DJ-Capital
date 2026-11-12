@@ -431,7 +431,7 @@ function autoAssign2(tx){
 }
 /* ---------- Rahmen ---------- */
 const TABS=[['start','Übersicht','home'],['geld','Ausgaben','geld'],['immo','Immobilien','immo'],['konten','Konten','konten'],['mehr','Mehr','more']];
-function curTab(){const t=(location.hash||'#start').slice(1);return TABS.some(x=>x[0]===t)?t:'start'}
+function curTab(){const t=(location.hash||'#start').slice(1).split('/')[0];return TABS.some(x=>x[0]===t)?t:'start'}
 function render(){if(locked||authOpen)return;document.body.classList.toggle('hide',!!ui.hide);
   const cur=curTab(),openN=S.txs.filter(t=>t.type==='open').length;
   const nav=TABS.map(t=>'<a href="#'+t[0]+'"'+(t[0]===cur?' class="on" aria-current="page"':'')+'>'+ICON[t[2]]+'<span>'+t[1]+'</span>'+(t[0]==='geld'&&openN?'<b class="badge">'+openN+'</b>':'')+'</a>').join('');
@@ -469,6 +469,26 @@ const bars=(cats,max,pk)=>'<div class="bars">'+cats.map(([c,v])=>'<button class=
 function periodTx(pk){const i=pk.indexOf(':'),k=pk.slice(0,i),v=pk.slice(i+1);if(k==='y')return S.txs.filter(t=>(t.type==='rent'?(t.forMonth||t.date):t.date).startsWith(v));const l=monthTx(v);return k==='mp'?l.filter(t=>!propOf(t.propertyId)):l}
 const periodLabel=pk=>{const v=pk.slice(pk.indexOf(':')+1);return v.length===4?'Jahr '+v:monthLabel(v)};
 function txSource(t){if(t.type==='rent'){const u=unitOf(t.unitId);return 'Miete '+(u?unitLabel(u):'')}return t.category||'Ohne Kategorie'}
+let LIST_PK='',PAYEE_IN=false;
+const payeeKey=s=>nrm(String(s||'')).replace(/\s+/g,' ').trim();
+function payeeDlg(name,mode,anchor){const k=payeeKey(name);const all=S.txs.filter(t=>t.type!=='ignore'&&payeeKey(t.name)===k);
+  const sel_=t=>mode==='a'?true:t.date.startsWith(anchor);const l=all.filter(sel_).sort((a,b)=>b.date.localeCompare(a.date));
+  const tot=Math.round(l.reduce((s,t)=>s+t.amount,0)*100)/100;
+  const lab=mode==='m'?monthLabel(anchor):mode==='y'?anchor:'Alle Zahlungen';
+  const nav=mode==='a'?'':'<div class="mbar"><button class="ic" data-act="payeeStep" data-v="-1" aria-label="Zurück">‹</button><strong>'+esc(lab)+'</strong><button class="ic" data-act="payeeStep" data-v="1" aria-label="Weiter">›</button></div>';
+  const months=mode==='y'?new Set(l.map(t=>t.date.slice(0,7))).size:0;
+  PAYEE_IN=true;let rows;try{rows=l.map(txRow).join('')}finally{PAYEE_IN=false}
+  modal('<div class="mhead"><div><h3>'+esc(name)+'</h3><small>'+l.length+(l.length===1?' Zahlung · ':' Zahlungen · ')+eur(Math.abs(tot))+(mode==='y'&&months>1?' · Ø '+eur(Math.abs(Math.round(tot/12*100)/100))+' pro Monat':'')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
+    +'<div class="seg" role="tablist">'+[['m','Monat'],['y','Jahr'],['a','Alles']].map(([v,t])=>'<button data-act="payeeMode" data-v="'+v+'"'+(v===mode?' class="on" aria-selected="true"':'')+'>'+t+'</button>').join('')+'</div>'+nav
+    +(l.length?'<div class="elist kvs">'+rows+'</div>':'<div class="empty sm">Keine Zahlungen in diesem Zeitraum.</div>'));
+  payeeDlg.cur={name,mode,anchor}}
+function payeeOpen(name,date){const pk=LIST_PK||'';let mode='m',anchor=(date||todayISO()).slice(0,7);
+  if(pk.startsWith('y:')){mode='y';anchor=pk.slice(2)}else if(/^m?p?:\d{4}-\d{2}/.test(pk)){anchor=pk.slice(pk.indexOf(':')+1,pk.indexOf(':')+8)}
+  payeeDlg(name,mode,anchor)}
+function payeeStep(d){const c=payeeDlg.cur;if(!c)return;let a=c.anchor;
+  if(c.mode==='y')a=String(+a+d);else{const [y,m]=a.split('-').map(Number);const t=new Date(y,m-1+d,1);a=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')}
+  payeeDlg(c.name,c.mode,a)}
+function payeeMode(v){const c=payeeDlg.cur;if(!c)return;let a=c.anchor;if(v==='y')a=a.slice(0,4);else if(v==='m'&&c.mode!=='m'){const last=S.txs.filter(t=>payeeKey(t.name)===payeeKey(c.name)&&(c.mode==='a'||t.date.startsWith(a))).map(t=>t.date).sort().pop();a=(last||todayISO()).slice(0,7)}payeeDlg(c.name,v,a)}
 function listDlg(title,sub,l,group){
   l=l.slice().sort((a,b)=>b.date.localeCompare(a.date));const tot=l.reduce((s,t)=>s+t.amount,0);
   let body='';
@@ -476,7 +496,7 @@ function listDlg(title,sub,l,group){
   else body='<div class="elist kvs">'+l.map(txRow).join('')+'</div>';
   modal('<div class="mhead"><div><h3>'+esc(title)+'</h3><small>'+esc(sub)+' · '+l.length+' Buchungen · '+eur(Math.abs(Math.round(tot*100)/100))+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'+(l.length?body:'<div class="empty sm">Keine Buchungen.</div>'));
 }
-const txRow=t=>{const acc=accOf(t.accountId),p=propOf(t.propertyId);return '<div class="erow"><span><b>'+esc(t.name||'–')+recChip(t)+'</b><small>'+dfmt(t.date)+(t.purpose?' · '+esc(t.purpose.slice(0,80)):'')+(p?' · '+esc(p.name):'')+(acc?' · '+esc(acc.name):'')+'</small></span><span class="num '+(t.amount<0?'neg':'pos')+'">'+eur(t.amount)+'</span></div>'};
+const txRow=t=>{const acc=accOf(t.accountId),p=propOf(t.propertyId);return '<div class="erow"><span><b>'+(t.name&&!PAYEE_IN?'<button class="lnk" data-act="payee" data-n="'+esc(t.name)+'" data-d="'+t.date+'">'+esc(t.name)+'</button>':esc(t.name||'–'))+recChip(t)+'</b><small>'+dfmt(t.date)+(t.purpose?' · '+esc(t.purpose.slice(0,80)):'')+(p?' · '+esc(p.name):'')+(acc?' · '+esc(acc.name):'')+'</small></span><span class="num '+(t.amount<0?'neg':'pos')+'">'+eur(t.amount)+'</span></div>'};
 /* ---------- Ausgaben / Umsätze ---------- */
 function vGeld(){
   const seg='<div class="seg"><button data-act="geld" data-v="monat"'+(ui.geld==='monat'?' class="on"':'')+'>Monat</button><button data-act="geld" data-v="umsaetze"'+(ui.geld==='umsaetze'?' class="on"':'')+'>Umsätze</button><button data-act="geld" data-v="jahr"'+(ui.geld==='jahr'?' class="on"':'')+'>Jahr</button></div>';
@@ -620,17 +640,42 @@ function accDetail(id){
 function editAcc(id){const a=id?accOf(id):{name:'',type:'bank',note:''};
   modal('<h3>'+(id?'Konto bearbeiten':'Neues Konto')+'</h3><label>Name<input id="f-aname" value="'+esc(a.name)+'" placeholder="z. B. Sparkasse, Bitcoin, Bargeld"></label><label>Art<select id="f-atype">'+Object.entries(ACC_TYPES).map(([k,v])=>'<option value="'+k+'"'+sel(k===a.type)+'>'+v+'</option>').join('')+'</select></label>'+(id?'':'<label>Aktueller Stand (€)<input id="f-aval" inputmode="decimal"></label>')+'<label>IBAN (damit Auszüge automatisch dem Konto zugeordnet werden)<input id="f-aiban" value="'+esc(a.iban||'')+'"></label><label>Notiz<input id="f-anote" value="'+esc(a.note)+'"></label><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveAcc" data-id="'+(id||'')+'">Speichern</button></div>')}
 /* ---------- Mehr ---------- */
-function vMehr(){
-  return '<h2>Mehr</h2>'+acctSection()
-  +'<section class="group"><h3>Von Hand eintragen</h3><p class="hint">Für Barzahlungen oder alles, was nicht im Kontoauszug steht.</p><div class="form"><button data-act="addManual" data-v="expense">+ Ausgabe</button><button data-act="addManual" data-v="income">+ Einnahme</button></div></section>'
-  +bkSection()+'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
-  +'<section class="group"><h3>Jahresbericht</h3><p class="hint">Alle Zahlen eines Jahres als Datei, zum Ausdrucken oder für den Steuerberater.</p><button data-act="report">Jahresbericht erstellen</button></section>'
-  +'<section class="group"><div class="h2row"><h3>Erinnerungen</h3><button class="small" data-act="toggleRemind">'+(S.settings&&S.settings.remind===false?'Auf Übersicht zeigen':'Auf Übersicht ausblenden')+'</button></div><p class="hint">Kündigungsfristen, fehlende Mieten und geplante Modernisierungen erkennt die App selbst. Hier legst du eigene Termine an, zum Beispiel Versicherungen oder Komunalna naknada.</p><div class="list">'+(S.reminders||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>'<div class="item static"><span class="it"><strong>'+esc(x.title)+'</strong><small>'+dfmt(x.date)+(x.repeat==='yearly'?' · jährlich':x.repeat==='monthly'?' · monatlich':'')+'</small></span><button class="ic" data-act="delRem" data-id="'+x.id+'" aria-label="Erinnerung löschen">×</button></div>').join('')+'</div><button data-act="addRem">+ Erinnerung</button></section>'
-  +'<section class="group"><h3>Automatische Regeln</h3><p class="hint">Steht das Stichwort im Umsatz, wird er beim Hochladen automatisch einsortiert.</p><div class="list">'+S.rules.map((r,i)=>'<div class="item static"><span class="it"><strong>'+esc(r.keyword)+'</strong><small>'+esc(r.category)+(r.propertyId?' · '+esc((propOf(r.propertyId)||{}).name||''):'')+'</small></span><button class="ic" data-act="delRule" data-i="'+i+'" aria-label="Regel löschen">×</button></div>').join('')+'</div>'
+const MI={
+ bank:'<path d="M3 10h18M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18M12 3l9 5H3z"/>',
+ pen:'<path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/>',
+ bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/>',
+ wand:'<path d="M4 20 16 8M14 4v2M20 10h-2M18.5 5.5 17 7M15 3l1 1M21 9l-1-1"/>',
+ file:'<path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6"/>',
+ lock:'<path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>'};
+const mic=(k,c)=>'<span class="mic '+c+'"><svg viewBox="0 0 24 24" aria-hidden="true">'+MI[k]+'</svg></span>';
+const MEHR_SUB={bank:'Bankverbindungen',remind:'Erinnerungen',rules:'Regeln & Kategorien',report:'Jahresbericht',acct:'Konto, Sicherheit & Backup'};
+function mehrSub(){const s=(location.hash.split('/')[1]||'');return MEHR_SUB[s]?s:''}
+const hm=t=>{const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+function bkNextRun(){const H=(bkSched.hours||[9,14,18]).slice().sort((x,y)=>x-y),n=new Date();for(const h of H){if(n.getHours()<h)return String(h).padStart(2,'0')+':00'}return 'morgen '+String(H[0]).padStart(2,'0')+':00'}
+function mehrStatus(){const b=bk(),n=b.conns.length,LI=loggedIn();let h='<section class="mstat">';
+  if(bkReady()&&n){const errC=b.conns.filter(c=>c.err==='expired'||c.lastErr);
+    h+='<a class="mstat-top" href="#mehr/bank">'+mic('bank','c1')+'<span><b>Bank · '+n+' verbunden</b><small>'+(b.lastFetch?'Zuletzt '+(new Date(b.lastFetch).toDateString()===new Date().toDateString()?'heute':dfmt(new Date(b.lastFetch).toISOString().slice(0,10)))+' '+hm(b.lastFetch)+(b.lastNew!=null?' · '+b.lastNew+' neu':''):'Noch nicht abgerufen')+'</small>'
+      +(LI&&bkSched.active?'<small>Nächster Abruf '+bkNextRun()+'</small>':'')+(errC.length?'<small class="neg">'+esc(errC.map(c=>c.aspsp.name).join(', '))+': '+(errC.some(c=>c.err==='expired')?'neu verbinden':'Fehler beim letzten Abruf')+'</small>':'')+'</span><span class="chev">›</span></a>'}
+  else if(LI&&!acct.bank)h+='';
+  else h+='<a class="mstat-top" href="#mehr/bank">'+mic('bank','c1')+'<span><b>Bank verbinden</b><small>Umsätze kommen dann automatisch</small></span><span class="chev">›</span></a>';
+  return h+'<div class="form"><button data-act="addManual" data-v="expense">+ Ausgabe</button><button data-act="addManual" data-v="income">+ Einnahme</button></div></section>'}
+function vMehr(){const s=mehrSub();
+  if(s)return '<div class="subhead"><a class="back" href="#mehr" aria-label="Zurück zu Mehr">‹</a><h2>'+MEHR_SUB[s]+'</h2></div>'+MEHR_P[s]();
+  const rc=remindItems().length,b=bk();
+  const row=(k,ic,c,t,x)=>'<a class="mrow" href="#mehr/'+k+'">'+mic(ic,c)+'<span>'+t+'</span>'+(x?'<em>'+x+'</em>':'')+'<span class="chev">›</span></a>';
+  return '<h2>Mehr</h2>'+mehrStatus()+'<nav class="mlist">'
+    +row('bank','bank','c1','Bankverbindungen',b.conns.length||'')+row('remind','bell','c2','Erinnerungen',rc||'')+row('rules','wand','c3','Regeln & Kategorien',S.rules.length||'')
+    +row('report','file','c4','Jahresbericht','')+row('acct','lock','c5','Konto, Sicherheit & Backup','')+'</nav>'}
+const MEHR_P={
+ bank:()=>bkSection().replace('<h3>Bankverbindung</h3>','')+bkSchedInfo(),
+ report:()=>'<section class="group"><p class="hint">Alle Zahlen eines Jahres als Datei, zum Ausdrucken oder für den Steuerberater.</p><button data-act="report">Jahresbericht erstellen</button></section>',
+ remind:()=>'<section class="group"><div class="h2row"><span></span><button class="small" data-act="toggleRemind">'+(S.settings&&S.settings.remind===false?'Auf Übersicht zeigen':'Auf Übersicht ausblenden')+'</button></div><p class="hint">Kündigungsfristen, fehlende Mieten und geplante Modernisierungen erkennt die App selbst. Hier legst du eigene Termine an, zum Beispiel Versicherungen oder Komunalna naknada.</p><div class="list">'+(S.reminders||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>'<div class="item static"><span class="it"><strong>'+esc(x.title)+'</strong><small>'+dfmt(x.date)+(x.repeat==='yearly'?' · jährlich':x.repeat==='monthly'?' · monatlich':'')+'</small></span><button class="ic" data-act="delRem" data-id="'+x.id+'" aria-label="Erinnerung löschen">×</button></div>').join('')+'</div><button data-act="addRem">+ Erinnerung</button></section>',
+ rules:()=>'<section class="group"><h3>Automatische Regeln</h3><p class="hint">Steht das Stichwort im Umsatz, wird er beim Abruf oder Hochladen automatisch einsortiert.</p><div class="list">'+S.rules.map((r,i)=>'<div class="item static"><span class="it"><strong>'+esc(r.keyword)+'</strong><small>'+esc(r.category)+(r.propertyId?' · '+esc((propOf(r.propertyId)||{}).name||''):'')+'</small></span><button class="ic" data-act="delRule" data-i="'+i+'" aria-label="Regel löschen">×</button></div>').join('')+'</div>'
   +'<div class="form"><input id="f-rkw" placeholder="Stichwort, z. B. REWE"><select id="f-rcat"><optgroup label="Ausgabe">'+S.cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup><optgroup label="Einnahme">'+S.icats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup></select><select id="f-rprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'">Immobilie: '+esc(p.name)+'</option>').join('')+'</select><button data-act="addRule">Regel hinzufügen</button></div></section>'
-  +'<section class="group"><h3>Kategorien für Ausgaben</h3><div class="chips">'+S.cats.map((c,i)=>'<span class="chip">'+esc(c)+'<button data-act="delCat" data-i="'+i+'" aria-label="'+esc(c)+' entfernen">×</button></span>').join('')+'</div><div class="form"><input id="f-cat" placeholder="Neue Kategorie"><button data-act="addCat">Hinzufügen</button></div></section>'
-  +'<section class="group"><h3>Backup</h3><p class="hint">Die Daten liegen nur auf diesem Gerät. Speichere regelmäßig ein Backup, zum Beispiel in Google Drive.</p><div class="form"><button data-act="copyBackup">Backup speichern</button><button data-act="restoreDlg">Backup einspielen</button></div></section>';
-}
+  +'<section class="group"><h3>Kategorien für Ausgaben</h3><div class="chips">'+S.cats.map((c,i)=>'<span class="chip">'+esc(c)+'<button data-act="delCat" data-i="'+i+'" aria-label="'+esc(c)+' entfernen">×</button></span>').join('')+'</div><div class="form"><input id="f-cat" placeholder="Neue Kategorie"><button data-act="addCat">Hinzufügen</button></div></section>',
+ acct:()=>acctSection()+'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
+  +'<section class="group"><h3>Backup</h3><p class="hint">'+(loggedIn()?'Deine Daten werden verschlüsselt mit deinem Konto synchronisiert. Ein zusätzliches Backup schadet trotzdem nicht.':'Die Daten liegen nur auf diesem Gerät. Speichere regelmäßig ein Backup, zum Beispiel in Google Drive.')+'</p><div class="form"><button data-act="copyBackup">Backup speichern</button><button data-act="restoreDlg">Backup einspielen</button></div></section>'
+};
 /* ---------- Formulare ---------- */
 function editProp(id){const p=id?propOf(id):{name:'',address:'',country:'Kroatien',value:'',valueNote:''};
   modal('<h3>'+(id?'Objekt bearbeiten':'Neues Objekt')+'</h3><label>Name<input id="f-name" value="'+esc(p.name)+'"></label><label>Adresse<input id="f-addr" value="'+esc(p.address)+'"></label><label>Land<input id="f-country" list="cl" value="'+esc(p.country)+'"></label><datalist id="cl"><option>Kroatien</option><option>Deutschland</option></datalist><div class="mact">'+(id?'<button class="danger" data-act="delProp" data-id="'+id+'">Löschen</button>':'')+'<button data-act="close">Abbrechen</button><button class="primary" data-act="saveProp" data-id="'+(id||'')+'">Speichern</button></div>')}
@@ -851,8 +896,11 @@ document.addEventListener('click',e=>{
   case 'delDev':S.devices=S.devices.filter(x=>x.id!==id);go();return;
   case 'per':ui.per=b.dataset.v;saveUi();render();return;
   case 'hide':ui.hide=!ui.hide;saveUi();render();toast(ui.hide?'Beträge versteckt':'Beträge sichtbar');return;
-  case 'catList':{const pk=b.dataset.p,c=b.dataset.c;if(!pk)return;listDlg(c,(pk.startsWith('mp:')?'Privat · ':'')+periodLabel(pk),periodTx(pk).filter(t=>t.type==='expense'&&(t.category||'Ohne Kategorie')===c),false);return}
-  case 'perList':{const pk=b.dataset.p,inc=b.dataset.k==='inc';listDlg(inc?'Einnahmen':'Ausgaben',periodLabel(pk),periodTx(pk).filter(t=>inc?isInc(t):t.type==='expense'),true);return}
+  case 'payee':payeeOpen(b.dataset.n,b.dataset.d);return;
+  case 'payeeStep':payeeStep(+b.dataset.v);return;
+  case 'payeeMode':payeeMode(b.dataset.v);return;
+  case 'catList':{const pk=b.dataset.p,c=b.dataset.c;if(!pk)return;LIST_PK=pk;listDlg(c,(pk.startsWith('mp:')?'Privat · ':'')+periodLabel(pk),periodTx(pk).filter(t=>t.type==='expense'&&(t.category||'Ohne Kategorie')===c),false);return}
+  case 'perList':{const pk=b.dataset.p,inc=b.dataset.k==='inc';LIST_PK=pk;listDlg(inc?'Einnahmen':'Ausgaben',periodLabel(pk),periodTx(pk).filter(t=>inc?isInc(t):t.type==='expense'),true);return}
   case 'tipsSave':saveTips();return;
   case 'tipsCash':cashTips();return;
   case 'toggleRepaid':ui.showRepaid=!ui.showRepaid;saveUi();render();return;
@@ -1092,8 +1140,8 @@ function bkSection(){const b=bk();const T=todayISO();const LI=loggedIn();if(LI&&
     return '<div class="erow"><span><b>'+esc(c.aspsp.name)+'</b><small>'+(exp?'Abgelaufen, bitte neu verbinden':'Verbunden bis '+dfmt(until))+' · <span>'+c.accounts.length+(c.accounts.length===1?' Konto':' Konten')+'</span></small></span><span class="form" style="margin:0">'+(exp||d<=14?'<button class="small primary" data-act="bkRenew" data-i="'+i+'">Neu verbinden</button>':'')+'<button class="small" data-act="bkRemove" data-i="'+i+'" aria-label="Entfernen">×</button></span></div>'}).join('');
   return '<section class="group"><h3>Bankverbindung</h3>'
     +(bkReady()?(b.conns.length?'<div class="elist">'+conns+'</div>':'<p class="hint">Noch keine Bank verbunden.</p>')
-      +'<div class="form"><button class="primary" data-act="bkFetch">Umsätze abrufen</button><button data-act="bkConnect">+ Bank verbinden</button></div>'
-      +(b.lastFetch?'<p class="hint">Zuletzt abgerufen: '+dfmt(new Date(b.lastFetch).toISOString().slice(0,10))+' '+new Date(b.lastFetch).toTimeString().slice(0,5)+'</p>':'')
+      +'<div class="form"><button data-act="bkConnect">+ Bank verbinden</button>'+(LI?'':'<button data-act="bkFetch">Jetzt abrufen</button>')+'</div>'
+      +(b.lastFetch&&!LI?'<p class="hint">Zuletzt abgerufen: '+dfmt(new Date(b.lastFetch).toISOString().slice(0,10))+' '+new Date(b.lastFetch).toTimeString().slice(0,5)+'</p>':'')
       +(LI?'':'<details class="bkset"'+(b.conns.length?'':' open')+'><summary>Einstellungen</summary>'+bkSetupForm()+'</details>')
       :'<p class="hint">Holt Umsätze und Kontostände direkt von der Bank. Dafür brauchst du einmalig ein kostenloses Konto bei Enable Banking und einen eigenen Vermittler bei Cloudflare.</p>'+bkSetupForm())
     +'</section>'}
@@ -1136,7 +1184,54 @@ async function bkCallback(cb){let st=null;try{st=JSON.parse(localStorage.getItem
   b.conns.push({sid:j.session_id,aspsp:{name,country},valid_until:j.valid_until||'',accounts,err:''});
   save();render();
   if(!accounts.length){toast('Verbunden, aber die Bank hat keine Konten geliefert. Ist das Konto bei Enable Banking freigeschaltet (Linked Accounts)?');return}
-  await bkFetch(true)}
+  await bkFetch(true);bkSchedPush(true).then(()=>render())}
+function bkIngest(a,txs,bals,T){let added=0,auto=0,dup=0;const used=new Set();
+  for(const x of txs){if(x.status==='PDNG'||x.status==='PNDG')continue;const t=bkMap(x);if(!t.amount)continue;
+    if(S.txs.some(y=>y.ebid===t.ebid)){dup++;continue}
+    const m=bkFuzzy(a.accId,t.amount,t.date,used,y=>!y.ebid);if(m){used.add(m.id);m.ebid=t.ebid;dup++;continue}
+    const tx={id:uid(),key:txKey(t),ebid:t.ebid,src:'bank',date:t.date,amount:t.amount,name:t.name,iban:t.iban,purpose:t.purpose,type:'open',unitId:'',propertyId:'',category:'',forMonth:'',accountId:a.accId};
+    if(autoAssign2(tx)){auto++;if(tx.type==='rent')dedupeExcel(tx)}S.txs.push(tx);added++}
+  const L=bals||[];const pick=BK_BAL.map(k=>L.find(z=>z.balance_type===k)).find(Boolean)||L[0];
+  if(pick&&pick.balance_amount){const ac=accOf(a.accId);if(ac){const v=Math.round(parseFloat(pick.balance_amount.amount)*100)/100;if(isFinite(v)){ac.history=(ac.history||[]).filter(h=>h.date!==T);ac.history.push({date:T,value:v})}}}
+  if(!a.last||a.last<T)a.last=T;return {added,auto,dup}}
+/* ---------- Automatischer Abruf (Worker-Zeitplan 9/14/18 Uhr, Ende-zu-Ende verschlüsselt) ---------- */
+let bkSched={active:false,hours:[9,14,18],last_run:0,ok:null};
+const b64d=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function bkKeys(){const b=bk();if(b.ek&&b.ek.priv&&b.ek.pub)return b.ek;
+  const k=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveKey']);
+  const pub=await crypto.subtle.exportKey('jwk',k.publicKey),priv=await crypto.subtle.exportKey('jwk',k.privateKey);
+  b.ek={pub:{kty:'EC',crv:'P-256',x:pub.x,y:pub.y},priv};save();return b.ek}
+async function bkOpenBlob(blob){const o=JSON.parse(blob),ek=bk().ek;if(!ek)throw new Error('nokey');
+  const priv=await crypto.subtle.importKey('jwk',ek.priv,{name:'ECDH',namedCurve:'P-256'},false,['deriveKey']);
+  const pub=await crypto.subtle.importKey('jwk',o.epk,{name:'ECDH',namedCurve:'P-256'},false,[]);
+  const key=await crypto.subtle.deriveKey({name:'ECDH',public:pub},priv,{name:'AES-GCM',length:256},false,['decrypt']);
+  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(o.iv)},key,b64d(o.ct))))}
+async function bkSchedPush(force){if(!loggedIn()||!acct.bank)return;const b=bk();
+  const acc=b.conns.filter(c=>c.err!=='expired').flatMap(c=>c.accounts.map(a=>({uid:a.uid,last:a.last||''})));
+  let ek=null;if(acc.length)ek=await bkKeys();
+  const body={pub:ek?JSON.stringify(ek.pub):'',accounts:acc},sig=JSON.stringify([ek&&ek.pub.x,acc.map(a=>a.uid)]);
+  let prev=null;try{prev=JSON.parse(localStorage.getItem('djc-sched')||'null')}catch(e){}
+  try{if(force||!prev||prev.sig!==sig||Date.now()-prev.t>12*3600e3){const j=await bkApi('/sched',{method:'PUT',body:JSON.stringify(body)});bkSched.active=!!j.active;if(j.hours)bkSched.hours=j.hours;try{localStorage.setItem('djc-sched',JSON.stringify({sig,t:Date.now()}))}catch(e){}}
+    const g=await bkApi('/sched');Object.assign(bkSched,g,{ok:true})}
+  catch(e){bkSched.ok=false;bkSched.active=false}}
+let bkInboxBusy=false,bkInboxT=0;
+async function bkInbox(){if(bkInboxBusy||!loggedIn()||!acct.bank||!bk().ek)return;bkInboxBusy=true;bkInboxT=Date.now();
+  try{const j=await bkApi('/inbox');const items=j.items||[];if(!items.length)return;const b=bk();let added=0,auto=0,ids=[],last=0;
+    for(const it of items){let p;try{p=await bkOpenBlob(it.blob)}catch(e){continue}ids.push(it.id);const T=new Date(p.at||it.created).toISOString().slice(0,10);last=Math.max(last,p.at||it.created);
+      for(const r of p.results||[]){const c=b.conns.find(c=>c.accounts.some(a=>a.uid===r.uid));if(!c)continue;const a=c.accounts.find(a=>a.uid===r.uid);
+        if(r.err){if(r.err==='EXPIRED_SESSION')c.err='expired';else c.lastErr=r.err;continue}
+        const x=bkIngest(a,r.transactions||[],r.balances||[],T);added+=x.added;auto+=x.auto;c.lastErr=''}}
+    if(!ids.length)return;
+    if(last>(b.lastFetch||0)){b.lastFetch=last;b.lastNew=added}save();render();
+    await bkApi('/inbox/ack',{method:'POST',body:JSON.stringify({ids})});
+    if(added)toast(added+' neue Umsätze von der Bank, davon '+auto+' automatisch zugeordnet.')}
+  catch(e){}finally{bkInboxBusy=false}}
+function bkSchedInfo(){if(!loggedIn()||!acct.bank||!bk().conns.length)return '';const b=bk();
+  const errs=b.conns.filter(c=>c.lastErr&&c.err!=='expired');
+  return '<section class="group"><h3>Automatischer Abruf</h3>'+(bkSched.active?'<p class="hint">Die Umsätze werden täglich um '+(bkSched.hours||[]).map(h=>h+':00').join(', ')+' Uhr abgerufen und verschlüsselt für dich bereitgelegt. Nächster Abruf: '+bkNextRun()+'.</p>'
+    :bkSched.ok===false?'<p class="hint">Der Server unterstützt den automatischen Abruf noch nicht. Bis dahin ruft die App beim Öffnen ab.</p>':'<p class="hint">Wird eingerichtet …</p>')
+    +errs.map(c=>'<p class="hint neg">'+esc(c.aspsp.name)+': Beim letzten Abruf kam ein Fehler von der Bank ('+esc(c.lastErr)+'). Meist ist das vorübergehend.</p>').join('')
+    +'<button class="small" data-act="bkFetch">Jetzt abrufen</button></section>'}
 function bkFuzzy(accId,amount,date,used,pred){const d0=Date.parse(date);
   return S.txs.find(t=>!used.has(t.id)&&pred(t)&&(t.accountId||'')===(accId||'')&&Math.abs(t.amount-amount)<0.005&&Math.abs(Date.parse(t.date)-d0)<=3*864e5)}
 function bkMap(x){const deb=x.credit_debit_indicator==='DBIT';let amt=Math.abs(parseFloat(x.transaction_amount&&x.transaction_amount.amount)||0);if(deb)amt=-amt;
@@ -1156,26 +1251,25 @@ async function bkFetch(manual){if(bkBusy||!bkReady())return;const b=bk();if(!b.c
         const from=a.last?new Date(Date.parse(a.last)-5*864e5).toISOString().slice(0,10):new Date(Date.now()-89*864e5).toISOString().slice(0,10);
         try{
           const j=await bkApi('/transactions?uid='+encodeURIComponent(a.uid)+'&from='+from);
-          const used=new Set();
-          for(const x of (j.transactions||[])){if(x.status==='PDNG'||x.status==='PNDG')continue;const t=bkMap(x);if(!t.amount)continue;
-            if(S.txs.some(y=>y.ebid===t.ebid)){dup++;continue}
-            const m=bkFuzzy(a.accId,t.amount,t.date,used,y=>!y.ebid);if(m){used.add(m.id);m.ebid=t.ebid;dup++;continue}
-            const tx={id:uid(),key:txKey(t),ebid:t.ebid,src:'bank',date:t.date,amount:t.amount,name:t.name,iban:t.iban,purpose:t.purpose,type:'open',unitId:'',propertyId:'',category:'',forMonth:'',accountId:a.accId};
-            if(autoAssign2(tx)){auto++;if(tx.type==='rent')dedupeExcel(tx)}S.txs.push(tx);added++}
-          try{const bj=await bkApi('/balances?uid='+encodeURIComponent(a.uid));const L=bj.balances||[];const pick=BK_BAL.map(k=>L.find(z=>z.balance_type===k)).find(Boolean)||L[0];
-            if(pick&&pick.balance_amount){const ac=accOf(a.accId);if(ac){const v=Math.round(parseFloat(pick.balance_amount.amount)*100)/100;if(isFinite(v)){ac.history=(ac.history||[]).filter(h=>h.date!==T);ac.history.push({date:T,value:v})}}}}catch(e){}
-          a.last=T;
-        }catch(e){if(e.code==='EXPIRED_SESSION'){c.err='expired'}errs.push(c.aspsp.name+': '+bkErrText(e))}
+          let bals=[];try{bals=(await bkApi('/balances?uid='+encodeURIComponent(a.uid))).balances||[]}catch(e){}
+          const r=bkIngest(a,j.transactions||[],bals,T);added+=r.added;auto+=r.auto;dup+=r.dup;c.lastErr='';
+        }catch(e){if(e.code==='EXPIRED_SESSION'){c.err='expired'}else c.lastErr=e.code||'ERROR';errs.push(c.aspsp.name+': '+bkErrText(e))}
       }
     }
-    b.lastFetch=Date.now();save();render();
+    b.lastFetch=Date.now();b.lastNew=added;save();render();
     if(errs.length)toast(errs[0]);
     else if(added)toast(added+' neue Umsätze von der Bank, davon '+auto+' automatisch zugeordnet.');
     else if(manual)toast('Keine neuen Umsätze.');
   }finally{bkBusy=false}}
 function bankAfterBoot(){if(BK_CB&&!bankAfterBoot.done){bankAfterBoot.done=true;bkCallback(BK_CB);return}
   if(bankAfterBoot.done)return;bankAfterBoot.done=true;
-  if(bkReady()&&bk().conns.length&&Date.now()-(bk().lastFetch||0)>4*3600e3)bkFetch(false)}
+  bkAuto()}
+async function bkAuto(){if(!bkReady()||!bk().conns.length)return;
+  if(loggedIn()){await bkSchedPush(false);await bkInbox();
+    if(bkSched.active&&bkSched.last_run&&Date.now()-bkSched.last_run<13*3600e3)return}
+  if(Date.now()-(bk().lastFetch||0)>4*3600e3)bkFetch(false)}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S&&!locked&&loggedIn()&&Date.now()-bkInboxT>120e3)bkInbox().then(()=>{if(curTab()==='mehr')render()})});
+setInterval(()=>{if(!document.hidden&&S&&!locked&&loggedIn())bkInbox()},15*60e3);
 {const _rg=runGo;runGo=function(){_rg();(async()=>{try{if(loggedIn())await syncPull(true)}catch(e){}bankAfterBoot()})()}}
 {const _ri=remindItems;remindItems=function(){const out=_ri();if(S.bank&&S.bank.conns)S.bank.conns.forEach(c=>{const u=(c.valid_until||'').slice(0,10);const d=u?daysTo(u):999;
   if(c.err==='expired'||d<=14)out.push({date:u||todayISO(),t:'Bankverbindung '+c.aspsp.name,s:c.err==='expired'||d<0?'Abgelaufen, bitte neu verbinden':'Läuft am '+dfmt(u)+' ab, bitte neu verbinden',lvl:c.err==='expired'||d<0?'late':'partial',act:'bank'})});
@@ -1186,7 +1280,7 @@ document.addEventListener('visibilitychange',async()=>{if(document.hidden||!S||l
 document.addEventListener('input',e=>{if(e.target&&e.target.id==='f-bkq')bkRenderList()});
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='f-bkc')bkLoadList(e.target.value)});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
-  if(a==='remGo'&&b.dataset.v==='bank'){location.hash='#mehr';return}
+  if(a==='remGo'&&b.dataset.v==='bank'){location.hash='#mehr/bank';return}
   if(!a.startsWith('bk'))return;
   if(a==='bkConnect')bkConnectDlg();
   else if(a==='bkStart')bkStart(b.dataset.v,b.dataset.c);
@@ -1195,7 +1289,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(
   else if(a==='bkGenKey'){const i=$('#f-bkkey');if(i&&(!i.value||confirm(tr('Neuen Schlüssel erzeugen? Dann musst du ihn auch bei Cloudflare ändern.'))))i.value=bkGenKey()}
   else if(a==='bkCopyKey'){const v=($('#f-bkkey')||{}).value||'';if(!v){toast('Erst einen Schlüssel erzeugen.');return}(navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast('Schlüssel kopiert.'),()=>{const i=$('#f-bkkey');i.select();toast('Schlüssel markiert, bitte kopieren.')})}
   else if(a==='bkRenew'){const c=bk().conns[+b.dataset.i];if(c)bkStart(c.aspsp.name,c.aspsp.country)}
-  else if(a==='bkRemove'){const c=bk().conns[+b.dataset.i];if(c&&confirm(tr('Verbindung zu dieser Bank entfernen? Die Umsätze bleiben in der App.'))){bk().conns.splice(+b.dataset.i,1);save();render();bkApi('/session?id='+encodeURIComponent(c.sid),{method:'DELETE'}).catch(()=>{})}}
+  else if(a==='bkRemove'){const c=bk().conns[+b.dataset.i];if(c&&confirm(tr('Verbindung zu dieser Bank entfernen? Die Umsätze bleiben in der App.'))){bk().conns.splice(+b.dataset.i,1);save();render();bkSchedPush(true);bkApi('/session?id='+encodeURIComponent(c.sid),{method:'DELETE'}).catch(()=>{})}}
 });
 I18N.push(['Bankverbindung','Bank connection','Bankovna veza'],['Umsätze abrufen','Fetch transactions','Dohvati transakcije'],['+ Bank verbinden','+ Connect bank','+ Poveži banku'],['Bank verbinden','Connect bank','Poveži banku'],['Noch keine Bank verbunden.','No bank connected yet.','Još nijedna banka nije povezana.'],['Einstellungen','Settings','Postavke'],
 ['Holt Umsätze und Kontostände direkt von der Bank. Dafür brauchst du einmalig ein kostenloses Konto bei Enable Banking und einen eigenen Vermittler bei Cloudflare.','Fetches transactions and balances directly from the bank. This needs a free Enable Banking account and your own relay on Cloudflare, set up once.','Dohvaća transakcije i stanja izravno iz banke. Za to jednom trebaš besplatan račun kod Enable Bankinga i vlastitog posrednika na Cloudflareu.'],
@@ -1416,3 +1510,12 @@ I18N.push(['Konto & Sync','Account & sync','Račun i sinkronizacija'],['Jetzt sy
 ['Keine Verbindung zum Server. Prüfe das Internet.','No connection to the server. Check the internet.','Nema veze s poslužiteljem. Provjeri internet.'],['E-Mail oder Passwort stimmt nicht.','Email or password is wrong.','E-pošta ili lozinka nije točna.'],['E-Mail oder Wiederherstellungscode stimmt nicht.','Email or recovery code is wrong.','E-pošta ili kod za oporavak nije točan.'],['Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.','Too many attempts. Please try again in 15 minutes.','Previše pokušaja. Pokušaj ponovno za 15 minuta.'],['Für diese E-Mail-Adresse ist die Registrierung nicht freigeschaltet.','Registration is not enabled for this email address.','Registracija za ovu adresu e-pošte nije omogućena.'],['Für diese E-Mail gibt es schon ein Konto. Bitte anmelden.','An account already exists for this email. Please sign in.','Za ovu e-poštu već postoji račun. Prijavi se.'],['Beim Server fehlt die Datenbank (Bindung DB).','The server is missing the database (binding DB).','Poslužitelju nedostaje baza podataka (veza DB).'],['Der Server erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).','The server does not allow this app address (ALLOWED_ORIGIN).','Poslužitelj ne dopušta ovu adresu aplikacije (ALLOWED_ORIGIN).'],
 ['Bankverbindung ist für dein Konto nicht freigeschaltet.','Bank connection is not enabled for your account.','Bankovna veza nije omogućena za tvoj račun.']);
 PREFIX.push(['Synchronisiert ','Synced ','Sinkronizirano ']);
+I18N.push(['Bankverbindungen','Bank connections','Bankovne veze'],['Regeln & Kategorien','Rules & categories','Pravila i kategorije'],['Konto, Sicherheit & Backup','Account, security & backup','Račun, sigurnost i sigurnosna kopija'],
+ ['Bank verbinden','Connect bank','Poveži banku'],['Umsätze kommen dann automatisch','Transactions then arrive automatically','Transakcije tada stižu automatski'],['Noch nicht abgerufen','Not fetched yet','Još nije dohvaćeno'],
+ ['Automatischer Abruf','Automatic fetch','Automatsko dohvaćanje'],['Jetzt abrufen','Fetch now','Dohvati sada'],['Wird eingerichtet …','Setting up …','Postavlja se …'],
+ ['Der Server unterstützt den automatischen Abruf noch nicht. Bis dahin ruft die App beim Öffnen ab.','The server does not support automatic fetching yet. Until then the app fetches when opened.','Poslužitelj još ne podržava automatsko dohvaćanje. Do tada aplikacija dohvaća pri otvaranju.'],
+ ['Monat','Month','Mjesec'],['Jahr','Year','Godina'],['Alles','All','Sve'],['Alle Zahlungen','All payments','Sva plaćanja'],['Keine Zahlungen in diesem Zeitraum.','No payments in this period.','Nema plaćanja u tom razdoblju.'],
+ ['Deine Daten werden verschlüsselt mit deinem Konto synchronisiert. Ein zusätzliches Backup schadet trotzdem nicht.','Your data is synced encrypted with your account. An extra backup still does no harm.','Tvoji podaci šifrirano se sinkroniziraju s tvojim računom. Dodatna sigurnosna kopija ipak ne škodi.'],
+ ['Steht das Stichwort im Umsatz, wird er beim Abruf oder Hochladen automatisch einsortiert.','If the keyword appears in a transaction, it is sorted automatically when fetched or uploaded.','Ako se ključna riječ pojavi u transakciji, automatski se razvrstava pri dohvaćanju ili učitavanju.']);
+PREFIX.push(['Bank · ','Bank · ','Banka · '],['Zuletzt heute ','Last today ','Zadnje danas '],['Zuletzt ','Last ','Zadnje '],['Nächster Abruf ','Next fetch ','Sljedeće dohvaćanje '],
+ ['Die Umsätze werden täglich um ','Transactions are fetched daily at ','Transakcije se dohvaćaju svaki dan u '],[' Zahlungen · ',' payments · ',' plaćanja · ']);
