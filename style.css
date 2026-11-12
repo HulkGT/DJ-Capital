@@ -262,3 +262,16 @@ details.bkset summary{cursor:pointer;color:var(--accent2);font-weight:600;margin
 .pill.pos{background:var(--good-bg);color:var(--good)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.neg{background:var(--bad-bg);color:var(--bad)}
 .rhelp summary{cursor:pointer;color:var(--muted);font-size:.85rem}
 .grid3{display:grid;grid-template-columns:1fr 1.3fr 1.3fr;gap:8px}
+/* Akzent-Karten */
+.card.accent{border:1px solid var(--ac-b);background:linear-gradient(160deg,var(--ac-bg),var(--surface) 60%)}
+.card.av{--ac-b:rgba(167,139,250,.45);--ac-bg:rgba(167,139,250,.12);--ac:#b9a6ff}
+.card.ay{--ac-b:rgba(255,201,77,.45);--ac-bg:rgba(255,201,77,.10);--ac:#ffc94d}
+.card.accent h3{display:flex;align-items:center;gap:8px}
+.hic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--ac-bg);color:var(--ac);flex:none}
+.hic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wbar{display:block;height:4px;border-radius:9px;background:var(--line);margin-top:6px;overflow:hidden;max-width:180px}.wbar i{display:block;height:100%;background:#b9a6ff;border-radius:9px}
+/* Konten in Bankfarben */
+.item.bk{border:1px solid;gap:10px}
+.blg{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:.72rem;flex:none;letter-spacing:.02em}
+.kline{display:flex;justify-content:space-between;align-items:baseline;padding:4px 2px 2px;color:var(--muted)}.kline b{color:var(--ink);font-size:1.15rem}
+.item.bk .it{flex:1;text-align:left;align-items:flex-start}
