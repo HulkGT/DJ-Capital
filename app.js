@@ -139,7 +139,7 @@ function dedupeEbid(s){const seen={},drop=new Set();const score=t=>(t.type&&t.ty
   (s.txs||[]).forEach(t=>{if(!t||!t.ebid)return;const o=seen[t.ebid];if(!o){seen[t.ebid]=t;return}if(score(t)>score(o)){drop.add(o.id);seen[t.ebid]=t}else drop.add(t.id)});
   if(drop.size)s.txs=s.txs.filter(t=>!drop.has(t.id));return drop.size}
 function migrate(s){
-  ['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes'].forEach(k=>s[k]=s[k]||[]);
+  ['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes','docs'].forEach(k=>s[k]=s[k]||[]);
   if(!s.cats||!s.cats.length)s.cats=EXP_CATS.slice();
   (s.notes||[]).forEach(n=>{if(n&&!n.id)n.id=uid()});
   dedupeEbid(s);
@@ -666,13 +666,46 @@ function vImmo(){
   +objs.map(o=>'<details class="obj"><summary><span class="it"><strong>'+esc(o.p.name)+'</strong><small>Miete '+eur(o.inc)+' · Ausgaben '+eur(o.out)+'</small></span><span class="num big '+(o.inc-o.out<0?'neg':'pos')+'">'+eur(o.inc-o.out)+'</span></summary>'+expDetail(ex.filter(t=>t.propertyId===o.p.id))+'</details>').join('')
   +'<div class="h2row" style="margin-top:8px"><h3>Objekte</h3><button data-act="addProp">+ Objekt</button></div><div class="list">'+S.props.map(p=>'<button class="item" data-act="editProp" data-id="'+p.id+'"><span class="it"><strong>'+esc(p.name)+'</strong><small>'+esc([p.address,p.country].filter(Boolean).join(' · '))+'</small></span><span class="chev">›</span></button>').join('')+'</div>';
 }
+/* ---------- Verträge & Dokumente: Ende-zu-Ende verschlüsselt, getrennt vom Datenstand ---------- */
+function docSection(u){const L=(S.docs||[]).filter(d=>d.unitId===u.id).sort((x,y)=>(y.date||'').localeCompare(x.date||''));
+  return '<div class="h2row" style="margin-top:10px"><h3>Verträge & Dokumente</h3><button class="small" data-act="docAdd" data-id="'+u.id+'">+ Vertrag</button></div>'
+    +(L.length?'<div class="elist kvs">'+L.map(d=>'<div class="erow"><span><button class="lnk" data-act="docOpen" data-id="'+d.id+'">'+esc(d.title||d.name)+'</button><small>'+dfmt(d.date)+' · '+(d.size>1048576?(d.size/1048576).toFixed(1).replace('.',',')+' MB':Math.max(1,Math.round(d.size/1024))+' KB')+(d.rpo==='open'?' · <span class="neg">noch bei Porezna melden</span>':'')+'</small></span><button class="ic" data-act="docDel" data-id="'+d.id+'" aria-label="Dokument löschen">×</button></div>').join('')+'</div>'
+    :'<p class="hint">Lade den Mietvertrag als PDF oder Foto hoch. Er wird verschlüsselt gespeichert, nur du kannst ihn öffnen.</p>')}
+function docPick(unitId){const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';inp.multiple=true;
+  inp.onchange=async()=>{const F=[...inp.files];if(!F.length)return;
+    modal('<h3>Dokument speichern</h3><label>Bezeichnung<input id="f-dt" value="'+esc(F.length===1?F[0].name.replace(/\.[a-z0-9]+$/i,''):'Mietvertrag')+'"></label><label>Datum<input id="f-dd" type="date" value="'+todayISO()+'"></label><label>Bei der Porezna gemeldet?<select id="f-drpo"><option value="ok">Ja, erledigt oder vom Notar</option><option value="open">Nein, muss ich noch einreichen</option><option value="na">Betrifft nicht (kein Mietvertrag)</option></select></label><p class="hint">'+F.length+(F.length===1?' Datei':' Dateien')+'. Fotos werden verkleinert, PDFs bis 5 MB.</p><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="docSave">Speichern</button></div>');
+    docPick.pending={unitId,files:F}};
+  inp.click()}
+async function docShrink(f){if(!/^image\//.test(f.type))return {buf:new Uint8Array(await f.arrayBuffer()),type:f.type||'application/pdf'};
+  const img=await createImageBitmap(f);const m=Math.min(1,2000/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*m);c.height=Math.round(img.height*m);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  const bl=await new Promise(r=>c.toBlob(r,'image/jpeg',.82));return {buf:new Uint8Array(await bl.arrayBuffer()),type:'image/jpeg'}}
+async function docSave(){const p=docPick.pending;if(!p)return;const title=$('#f-dt').value.trim()||'Dokument',date=$('#f-dd').value||todayISO(),rpo=$('#f-drpo').value;closeModal();
+  let n=0;for(const f of p.files){try{const {buf,type}=await docShrink(f);if(buf.length>5*1048576){toast(f.name+' ist größer als 5 MB.');continue}
+    const id=uid();toast('Wird verschlüsselt gespeichert …');await docPut(id,buf);S.docs=S.docs||[];S.docs.push({id,unitId:p.unitId,title:p.files.length>1?title+' ('+(n+1)+')':title,name:f.name,type,size:buf.length,date,rpo});n++}
+    catch(e){toast('Speichern fehlgeschlagen: '+(e.code==='QUOTA'?'Speicher voll.':e.code==='NETWORK'?'keine Verbindung.':'bitte erneut versuchen.'))}}
+  if(n){if(rpo==='open'){const u=unitOf(p.unitId);if(u)u.rpo='open'}save();toast(n===1?'Dokument gespeichert.':n+' Dokumente gespeichert.');unitDetail(p.unitId)}docPick.pending=null}
+async function docKey(){if(loggedIn())return await getMK();let k=await idbGet(KV,'doc-key');if(!k){k=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);await idbSet(KV,'doc-key',k)}return k}
+async function docPut(id,buf){const ct=await gcmEnc(await docKey(),buf);
+  if(!loggedIn()){await idbSet(KV,'doc:'+id,ct);return}
+  let r;try{r=await fetch(SRV+'/file/'+id,{method:'PUT',headers:{'Content-Type':'application/octet-stream',Authorization:'Bearer '+acct.token},body:ct})}catch(e){throw {code:'NETWORK'}}
+  if(!r.ok){let j={};try{j=await r.json()}catch(e){}throw {code:j.error||'HTTP'}}}
+async function docGet(id){let ct;if(!loggedIn())ct=await idbGet(KV,'doc:'+id);
+  else{const r=await fetch(SRV+'/file/'+id,{headers:{Authorization:'Bearer '+acct.token}});if(!r.ok)throw {code:r.status===404?'NOT_FOUND':'HTTP'};ct=new Uint8Array(await r.arrayBuffer())}
+  if(!ct)throw {code:'NOT_FOUND'};return await gcmDec(await docKey(),new Uint8Array(ct))}
+async function docOpen(id){const d=(S.docs||[]).find(x=>x.id===id);if(!d)return;const w=window.open('','_blank');toast('Wird geladen …');
+  try{const bl=new Blob([await docGet(id)],{type:d.type||'application/pdf'}),url=URL.createObjectURL(bl);
+    if(w){w.location.href=url}else{const a=document.createElement('a');a.href=url;a.download=(d.title||'Dokument')+(d.type==='image/jpeg'?'.jpg':'.pdf');document.body.appendChild(a);a.click();a.remove()}setTimeout(()=>URL.revokeObjectURL(url),120000)}
+  catch(e){if(w)w.close();toast(e.code==='NOT_FOUND'?'Datei nicht gefunden. Sie liegt evtl. nur auf einem anderen Gerät.':'Öffnen fehlgeschlagen.')}}
+async function docDel(id){const d=(S.docs||[]).find(x=>x.id===id);if(!d||!confirm('„'+(d.title||d.name)+'“ löschen?'))return;
+  try{if(loggedIn())await fetch(SRV+'/file/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+acct.token}});else{const db=await idb();await new Promise(r=>{const t=db.transaction(KV,'readwrite');t.objectStore(KV).delete('doc:'+id);t.oncomplete=r;t.onerror=r})}}catch(e){}
+  S.docs=S.docs.filter(x=>x.id!==id);save();unitDetail(d.unitId)}
 function unitDetail(id){
   const u=unitOf(id);if(!u)return;const today=todayISO();
   const months=[];for(let i=-11;i<=0;i++)months.push(addMonth(monthOf(today),i));
   const strip=u.rent>0?'<div class="strip">'+months.map(m=>{const s=rentStatus(u,m,S.txs,today);return '<span class="dot '+(s?s.st:'out')+'" title="'+esc(monthLabel(m)+': '+(s?LBL[s.st]:'nicht vermietet'))+'">'+MONTHS[+m.slice(5)-1].slice(0,1)+'</span>'}).join('')+'</div><p class="legend"><span class="dot paid"></span>bezahlt <span class="dot partial"></span>teilweise <span class="dot late"></span>überfällig</p>':'';
   let warn='';if(u.contractEnd&&u.noticeMonths){const ym=addMonth(u.contractEnd.slice(0,7),-u.noticeMonths);const k=ym+'-'+pad(new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate());if(k>=today)warn='<div class="kv"><span>Kündigung spätestens</span><b>'+dfmt(k)+'</b></div>'}
   const kv=(l,v)=>v?'<div class="kv"><span>'+l+'</span><b>'+v+'</b></div>':'';
-  modal('<div class="mhead"><div><h3>'+esc(unitLabel(u))+'</h3><small>'+esc(u.tenant||'Kein Mieter')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'+strip+'<div class="kvs">'+kv('Miete / Monat',u.rent?eur(u.rent):'')+kv('Fällig am',u.rent?u.dueDay+'. des Monats':'')+kv('Kaution',u.deposit?eur(u.deposit):'')+kv('Vertrag bis',dfmt(u.contractEnd))+warn+kv('IBAN',esc(u.iban))+'</div>'+(u.note?'<p class="note">'+esc(u.note)+'</p>':'')+'<button class="wide" data-act="checklist" data-id="'+u.id+'">Mieterwechsel-Checkliste ›</button><div class="mact"><button class="danger" data-act="delUnit" data-id="'+u.id+'">Löschen</button><button class="primary" data-act="editUnit" data-id="'+u.id+'">Bearbeiten</button></div>');
+  modal('<div class="mhead"><div><h3>'+esc(unitLabel(u))+'</h3><small>'+esc(u.tenant||'Kein Mieter')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'+strip+'<div class="kvs">'+kv('Miete / Monat',u.rent?eur(u.rent):'')+kv('Fällig am',u.rent?u.dueDay+'. des Monats':'')+kv('Kaution',u.deposit?eur(u.deposit):'')+kv('Vertrag bis',dfmt(u.contractEnd))+warn+kv('IBAN',esc(u.iban))+'</div>'+(u.note?'<p class="note">'+esc(u.note)+'</p>':'')+docSection(u)+'<button class="wide" data-act="checklist" data-id="'+u.id+'">Mieterwechsel-Checkliste ›</button><div class="mact"><button class="danger" data-act="delUnit" data-id="'+u.id+'">Löschen</button><button class="primary" data-act="editUnit" data-id="'+u.id+'">Bearbeiten</button></div>');
 }
 /* ---------- Immobilien: Unterbereiche ---------- */
 const IMMO_SEG=[['miete','Miete','g','<path d="M3 7h18v10H3zM7 12h.01M17 12h.01"/><circle cx="12" cy="12" r="2.2"/>'],['zaehler','Zähler','b','<path d="M4 16a8 8 0 1 1 16 0M12 16l4-5M3 20h18"/>'],['plan','Modernisierungsplan','o','<path d="M14 6l4 4-9 9H5v-4zM13 7l4 4M4 4l4 4M4 8l4-4"/>'],['ruecklage','Rücklagen','y','<path d="M4 12a7 5.5 0 0 1 14-1.5l2 .5v3l-2 .8a7 5.5 0 0 1-2 2.2V19h-3v-1.5h-2V19H8v-2a6 5 0 0 1-4-5zM9 8.5h3"/>'],['infos','Infos','v','<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>']];
@@ -1062,6 +1095,7 @@ document.addEventListener('click',e=>{
   case 'editNote':noteDlg(id);return;
   case 'saveNote':{const t=$('#f-nt').value.trim(),x=$('#f-nx').value;if(!t){toast('Bitte einen Titel eingeben.');return}S.notes=S.notes||[];if(id)Object.assign(S.notes.find(n=>n.id===id),{title:t,text:x});else S.notes.push({id:uid(),title:t,text:x});closeModal();go();return}
   case 'delNote':S.notes=(S.notes||[]).filter(n=>n.id!==id);closeModal();go();return;
+  case 'docAdd':docPick(id);return;case 'docSave':docSave();return;case 'docOpen':docOpen(id);return;case 'docDel':docDel(id);return;
   case 'delLearn':if(S.learn)delete S.learn[b.dataset.k];go();return;
   case 'toggleRemind':S.settings=S.settings||{};S.settings.remind=S.settings.remind===false;go();return;
   case 'checklist':clDlg(id);return;
@@ -1540,7 +1574,7 @@ async function api(path,opt){let r;try{r=await fetch(SRV+path,Object.assign({},o
   let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw {code:j.error||('HTTP_'+r.status),status:r.status,version:j.version};return j}
 function authErr(e){const c=e&&e.code;return ({NETWORK:'Keine Verbindung zum Server. Prüfe das Internet.',WRONG_LOGIN:'E-Mail oder Passwort stimmt nicht.',WRONG_CODE:'E-Mail oder Wiederherstellungscode stimmt nicht.',TOO_MANY:'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.',NOT_INVITED:'Für diese E-Mail-Adresse ist die Registrierung nicht freigeschaltet.',EXISTS:'Für diese E-Mail gibt es schon ein Konto. Bitte anmelden.',NO_DATABASE:'Beim Server fehlt die Datenbank (Bindung DB).',FORBIDDEN_ORIGIN:'Der Server erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).'})[c]||('Fehler'+(c?' ('+c+')':'')+'.')}
 /* --- Zustand für den Tresor --- */
-const ARR_KEYS=['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes'];
+const ARR_KEYS=['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes','docs'];
 function exportS(){const o=JSON.parse(JSON.stringify(S));if(o.settings)delete o.settings.lock;delete o._t;return o}
 const hasData=s=>!!s&&ARR_KEYS.some(k=>Array.isArray(s[k])&&s[k].length);
 function mergeInto(local,server){/* Neues vom anderen Gerät übernehmen, eigene Änderungen behalten */
@@ -1712,3 +1746,5 @@ I18N.push(['Rendite','Yield','Prinos'],['Notizen & Unterlagen','Notes & document
  ['Brutto','Gross','Bruto'],['Netto','Net','Neto'],['Überschuss','Surplus','Višak'],['Amortisiert','Paid back','Isplaćeno'],['schwach','weak','slabo'],['solide','solid','solidno'],['gut','good','dobro'],
  ['Steuer auf Mieteinnahmen','Tax on rental income','Porez na najamninu'],['Kauf und Investitionen','Purchase and investments','Kupnja i ulaganja'],['Was','What','Što'],['Vertrag bei der Porezna gemeldet?','Contract reported to the tax office?','Ugovor prijavljen Poreznoj?'],['Ja, erledigt oder vom Notar','Yes, done or by the notary','Da, obavljeno ili putem javnog bilježnika'],['Nein, muss ich noch einreichen','No, still need to submit','Ne, moram još predati']);
 PREFIX.push(['Mietvertrag melden ','Report rental contract ','Prijavi ugovor o najmu '],['Geräte ','Appliances ','Uređaji ']);
+I18N.push(['Verträge & Dokumente','Contracts & documents','Ugovori i dokumenti'],['+ Vertrag','+ Contract','+ Ugovor'],['Dokument speichern','Save document','Spremi dokument'],['Bezeichnung','Name','Naziv'],['Betrifft nicht (kein Mietvertrag)','Not applicable (no rental contract)','Ne odnosi se (nije ugovor o najmu)'],
+ ['Lade den Mietvertrag als PDF oder Foto hoch. Er wird verschlüsselt gespeichert, nur du kannst ihn öffnen.','Upload the rental contract as PDF or photo. It is stored encrypted, only you can open it.','Učitaj ugovor o najmu kao PDF ili fotografiju. Sprema se šifrirano, samo ga ti možeš otvoriti.'],['Dokument gespeichert.','Document saved.','Dokument spremljen.'],['Wird geladen …','Loading …','Učitava se …']);
