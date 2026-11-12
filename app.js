@@ -481,9 +481,28 @@ function isOwnTransfer(tx){if(tx.iban&&S.accounts.some(a=>a.iban&&normIban(a.iba
 /* Einmalig: früher wurden Überweisungen an einen festen Namen als Umbuchung versteckt. Jetzt nur noch eigene Konten. */
 function mig11(){if(S.mig11)return;let n=0;S.txs.forEach(t=>{if(t.type!=='ignore')return;const hay=nrm((t.name||'')+' '+(t.purpose||''));if(/vlastiti ra|umbuchung|uebertrag eigenes/.test(hay))return;
   const g=cpFromText(t.purpose||'');const ib=t.iban||g.iban;if(!ib||S.accounts.some(a=>a.iban&&normIban(a.iban)===ib))return;if(!t.iban)t.iban=ib;if(!t.name&&g.name)t.name=g.name;t.type='open';autoAssign2(t);n++});S.mig11=1;if(n)save()}
+/* Gelernte Zuordnungen: Empfänger (oder Händler aus dem Zweck) → Kategorie */
+const L_STOP=/^(pos|kartica|karticom|visa|mastercard|maestro|kupnja|kupovina|placanje|plaćanje|zahlung|kartenzahlung|lastschrift|sepa|paypal|debit|kreditkarte|girocard|ec|nr|br|ref|www|http|https|the|und|von)$/;
+function learnKey(tx){const sg=tx.amount<0?'-':'+';const n=payeeKey(String(tx.name||'').replace(/^PayPal: /i,''));if(n&&n!=='–'&&n!=='-')return sg+'n:'+n;
+  const tok=nrm(tx.purpose||'').replace(/[^a-zčćžšđäöüß ]/g,' ').split(/\s+/).filter(w=>w.length>=3&&!L_STOP.test(w));return tok.length?sg+'p:'+tok[0]:''}
+function learnLabel(k){return k.slice(3)+(k[1]==='p'?' (im Zweck)':'')}
+function learnApply(tx,v){tx.unitId='';tx.forMonth='';tx.category='';tx.propertyId='';
+  if(v.t==='rent'){if(!unitOf(v.u))return false;tx.type='rent';tx.unitId=v.u;tx.forMonth=monthOf(tx.date)}
+  else if(v.t==='expense'){tx.type='expense';tx.category=v.c||'';tx.propertyId=v.p&&propOf(v.p)?v.p:''}
+  else if(v.t==='income'){tx.type='income';tx.category=v.c||''}
+  else if(v.t==='ignore')tx.type='ignore';else return false;return true}
+function learnFrom(tx){const k=learnKey(tx);if(!k)return 0;S.learn=S.learn||{};
+  if(tx.type==='open'){delete S.learn[k];return 0}
+  if(!['rent','expense','income','ignore'].includes(tx.type))return 0;
+  const v={t:tx.type};if(tx.type==='rent')v.u=tx.unitId;else if(tx.type!=='ignore'){v.c=tx.category||'';if(tx.propertyId)v.p=tx.propertyId}
+  S.learn[k]=v;let n=0;S.txs.forEach(o=>{if(o!==tx&&o.type==='open'&&learnKey(o)===k&&learnApply(o,v)){n++;if(o.type==='rent')dedupeExcel(o)}});return n}
+function learnSection(){const E=Object.entries(S.learn||{});const what=v=>v.t==='rent'?'Miete '+((unitOf(v.u)&&unitLabel(unitOf(v.u)))||''):v.t==='ignore'?'Umbuchung / ignorieren':(v.c||'')+(v.p&&propOf(v.p)?' · '+propOf(v.p).name:'');
+  return '<section class="group"><h3>Gelernte Zuordnungen</h3><p class="hint">Ordnest du einen Umsatz zu, merkt sich die App den Empfänger. Alle offenen und alle neuen Umsätze von ihm werden genauso einsortiert.</p>'
+    +(E.length?'<div class="list">'+E.sort((p,q)=>p[0].slice(3).localeCompare(q[0].slice(3))).map(([k,v])=>'<div class="item static"><span class="it"><strong>'+esc(learnLabel(k))+'</strong><small>'+esc(what(v))+'</small></span><button class="ic" data-act="delLearn" data-k="'+esc(k)+'" aria-label="Zuordnung vergessen">×</button></div>').join('')+'</div>':'<p class="hint">Noch nichts gelernt.</p>')+'</section>'}
 function autoAssign2(tx){
   const hay=nrm(tx.name+' '+tx.purpose);
   if(/vlastiti ra|umbuchung|uebertrag eigenes/.test(hay)||isOwnTransfer(tx)){tx.type='ignore';return true}
+  {const lv=S.learn&&S.learn[learnKey(tx)];if(lv&&learnApply(tx,lv))return true}
   if(tx.amount>0&&/kamat|habenzins|zinsgutschrift/.test(hay)&&S.icats.includes('Zinsen & Dividenden')){tx.type='income';tx.category='Zinsen & Dividenden';return true}
   if(tx.amount>0){
     let c=tx.iban?S.units.filter(u=>u.iban&&normIban(u.iban)===tx.iban):[];
@@ -739,7 +758,7 @@ const MEHR_P={
  report:()=>'<section class="group"><p class="hint">Alle Zahlen eines Jahres als Datei, zum Ausdrucken oder für den Steuerberater.</p><button data-act="report">Jahresbericht erstellen</button></section>',
  remind:()=>'<section class="group"><div class="h2row"><span></span><button class="small" data-act="toggleRemind">'+(S.settings&&S.settings.remind===false?'Auf Übersicht zeigen':'Auf Übersicht ausblenden')+'</button></div><p class="hint">Kündigungsfristen, fehlende Mieten und geplante Modernisierungen erkennt die App selbst. Hier legst du eigene Termine an, zum Beispiel Versicherungen oder Komunalna naknada.</p><div class="list">'+(S.reminders||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>'<div class="item static"><span class="it"><strong>'+esc(x.title)+'</strong><small>'+dfmt(x.date)+(x.repeat==='yearly'?' · jährlich':x.repeat==='monthly'?' · monatlich':'')+'</small></span><button class="ic" data-act="delRem" data-id="'+x.id+'" aria-label="Erinnerung löschen">×</button></div>').join('')+'</div><button data-act="addRem">+ Erinnerung</button></section>',
  rules:()=>'<section class="group"><h3>Automatische Regeln</h3><p class="hint">Steht das Stichwort im Umsatz, wird er beim Abruf oder Hochladen automatisch einsortiert.</p><div class="list">'+S.rules.map((r,i)=>'<div class="item static"><span class="it"><strong>'+esc(r.keyword)+'</strong><small>'+esc(r.category)+(r.propertyId?' · '+esc((propOf(r.propertyId)||{}).name||''):'')+'</small></span><button class="ic" data-act="delRule" data-i="'+i+'" aria-label="Regel löschen">×</button></div>').join('')+'</div>'
-  +'<div class="form"><input id="f-rkw" placeholder="Stichwort, z. B. REWE"><select id="f-rcat"><optgroup label="Ausgabe">'+S.cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup><optgroup label="Einnahme">'+S.icats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup></select>'+(immoOn()?'<select id="f-rprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'">Immobilie: '+esc(p.name)+'</option>').join('')+'</select>':'')+'<button data-act="addRule">Regel hinzufügen</button></div></section>'
+  +'<div class="form"><input id="f-rkw" placeholder="Stichwort, z. B. REWE"><select id="f-rcat"><optgroup label="Ausgabe">'+S.cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup><optgroup label="Einnahme">'+S.icats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup></select>'+(immoOn()?'<select id="f-rprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'">Immobilie: '+esc(p.name)+'</option>').join('')+'</select>':'')+'<button data-act="addRule">Regel hinzufügen</button></div></section>'+learnSection()
   +'<section class="group"><h3>Kategorien für Ausgaben</h3><div class="chips">'+S.cats.map((c,i)=>'<span class="chip">'+esc(c)+'<button data-act="delCat" data-i="'+i+'" aria-label="'+esc(c)+' entfernen">×</button></span>').join('')+'</div><div class="form"><input id="f-cat" placeholder="Neue Kategorie"><button data-act="addCat">Hinzufügen</button></div></section>',
  acct:()=>acctSection()+'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><div class="h2row" style="margin-top:6px"><span>Immobilien verwenden</span><button class="small'+(immoOn()?' primary':'')+'" data-act="toggleImmo">'+(immoOn()?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Für vermietete Wohnungen und Häuser: Mieteingang, Mieter, Zähler, Modernisierung. Wenn du keine hast, schalte den Bereich aus. Es wird nichts gelöscht.</p><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
   +'<section class="group"><h3>Backup</h3><p class="hint">'+(loggedIn()?'Deine Daten werden verschlüsselt mit deinem Konto synchronisiert. Ein zusätzliches Backup schadet trotzdem nicht.':'Die Daten liegen nur auf diesem Gerät. Speichere regelmäßig ein Backup, zum Beispiel in Google Drive.')+'</p><div class="form"><button data-act="copyBackup">Backup speichern</button><button data-act="restoreDlg">Backup einspielen</button></div></section>'
@@ -1000,6 +1019,7 @@ document.addEventListener('click',e=>{
   case 'delRem':S.reminders=(S.reminders||[]).filter(x=>x.id!==id);go();return;
   case 'toggleImmo':S.settings=S.settings||{};S.settings.immo=!immoOn();go();toast(immoOn()?'Immobilien sind eingeschaltet.':'Immobilien sind ausgeblendet. Deine Daten bleiben gespeichert.');return;
   case 'immoAsk':S.settings=S.settings||{};S.settings.immo=b.dataset.v==='1';closeModal();go();return;
+  case 'delLearn':if(S.learn)delete S.learn[b.dataset.k];go();return;
   case 'toggleRemind':S.settings=S.settings||{};S.settings.remind=S.settings.remind===false;go();return;
   case 'checklist':clDlg(id);return;
   case 'clKind':clDlg(id,b.dataset.v);return;
@@ -1035,8 +1055,12 @@ document.addEventListener('change',e=>{if(e.target&&e.target.id==='f-lang'){setL
   if(t.dataset.tx){const tx=S.txs.find(x=>x.id===t.dataset.tx);if(!tx)return;
     if(t.dataset.f==='assign'){const v=t.value;tx.unitId='';tx.forMonth='';if(!v.startsWith('exp:'))tx.propertyId='';tx.category='';
       if(v.startsWith('rent:')){tx.type='rent';tx.unitId=v.slice(5);tx.forMonth=monthOf(tx.date);dedupeExcel(tx)}else if(v.startsWith('exp:')){tx.type='expense';tx.category=v.slice(4)}else if(v.startsWith('inc:')){tx.type='income';tx.category=v.slice(4)}else{tx.type=v;if(v==='loan'&&!tx.person)tx.person=(tx.name||'').replace(/^PayPal: /,'')}
-      save();if(ui.filter==='open'&&tx.type!=='open'){t.closest('.tx').classList.add('done');setTimeout(render,450)}else $('#txlist').innerHTML=txList();return}
-    tx[t.dataset.f]=t.value;save()}
+      const more=learnFrom(tx);if(more)toast('Gemerkt. '+more+(more===1?' weiterer offener Umsatz':' weitere offene Umsätze')+' von diesem Empfänger wurde'+(more===1?'':'n')+' gleich mit zugeordnet.');
+      save();if(ui.filter==='open'&&tx.type!=='open'){t.closest('.tx').classList.add('done');setTimeout(render,450)}else if(more)render();else $('#txlist').innerHTML=txList();return}
+    const old=tx[t.dataset.f];tx[t.dataset.f]=t.value;
+    if(t.dataset.f==='propertyId'&&tx.type==='expense'){const k=learnKey(tx);if(k){S.learn=S.learn||{};const v={t:'expense',c:tx.category||''};if(tx.propertyId)v.p=tx.propertyId;S.learn[k]=v;
+      S.txs.forEach(o=>{if(o!==tx&&o.type==='expense'&&(o.category||'')===(tx.category||'')&&(o.propertyId||'')===(old||'')&&learnKey(o)===k)o.propertyId=tx.propertyId})}}
+    save()}
 });
 document.addEventListener('input',e=>{if(e.target.id==='txq'){ui.q=e.target.value;ui.limit=100;saveUi();$('#txlist').innerHTML=txList()}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
@@ -1470,6 +1494,7 @@ function exportS(){const o=JSON.parse(JSON.stringify(S));if(o.settings)delete o.
 const hasData=s=>!!s&&ARR_KEYS.some(k=>Array.isArray(s[k])&&s[k].length);
 function mergeInto(local,server){/* Neues vom anderen Gerät übernehmen, eigene Änderungen behalten */
   ARR_KEYS.forEach(k=>{const L=local[k]=local[k]||[];const ids=new Set(L.map(x=>x&&x.id).filter(Boolean));(server[k]||[]).forEach(x=>{if(x&&x.id&&!ids.has(x.id))L.push(x)})});
+  if(server.learn||local.learn)local.learn=Object.assign({},server.learn||{},local.learn||{});
   if(server.bank&&server.bank.conns){local.bank=local.bank||{conns:[]};local.bank.conns=local.bank.conns||[];const sid=new Set(local.bank.conns.map(c=>c.sid));server.bank.conns.forEach(c=>{if(!sid.has(c.sid))local.bank.conns.push(c)});local.bank.lastFetch=Math.max(local.bank.lastFetch||0,server.bank.lastFetch||0)}
   (server.cats||[]).forEach(c=>{if(!(local.cats||[]).includes(c))(local.cats=local.cats||[]).push(c)});
   return local}
@@ -1623,3 +1648,6 @@ I18N.push(['Immobilien verwenden','Use properties','Koristi nekretnine'],['Hast 
  ['Immobilien sind eingeschaltet.','Properties are switched on.','Nekretnine su uključene.'],['Immobilien sind ausgeblendet. Deine Daten bleiben gespeichert.','Properties are hidden. Your data stays saved.','Nekretnine su skrivene. Tvoji podaci ostaju spremljeni.'],
  ['Für vermietete Wohnungen und Häuser: Mieteingang, Mieter, Zähler, Modernisierung. Wenn du keine hast, schalte den Bereich aus. Es wird nichts gelöscht.','For rented flats and houses: rent received, tenants, meters, modernisation. If you have none, switch the section off. Nothing is deleted.','Za iznajmljene stanove i kuće: najam, najmoprimci, brojila, modernizacija. Ako ih nemaš, isključi ovaj dio. Ništa se ne briše.'],
  ['Dann zeigt die App einen eigenen Bereich für Mieteingang, Mieter, Zähler und Modernisierung. Du kannst das später unter Mehr → Konto, Sicherheit & Backup ändern.','Then the app shows a separate section for rent, tenants, meters and modernisation. You can change this later under More → Account, security & backup.','Tada aplikacija prikazuje poseban dio za najam, najmoprimce, brojila i modernizaciju. To možeš kasnije promijeniti pod Više → Račun, sigurnost i sigurnosna kopija.']);
+I18N.push(['Gelernte Zuordnungen','Learned assignments','Naučena razvrstavanja'],['Noch nichts gelernt.','Nothing learned yet.','Još ništa nije naučeno.'],
+ ['Ordnest du einen Umsatz zu, merkt sich die App den Empfänger. Alle offenen und alle neuen Umsätze von ihm werden genauso einsortiert.','When you assign a transaction, the app remembers the payee. All open and all new transactions from them are sorted the same way.','Kad razvrstaš transakciju, aplikacija pamti primatelja. Sve otvorene i sve nove transakcije od njega razvrstavaju se jednako.']);
+PREFIX.push(['Gemerkt. ','Remembered. ','Zapamćeno. ']);
