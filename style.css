@@ -241,3 +241,14 @@ details.bkset summary{cursor:pointer;color:var(--accent2);font-weight:600;margin
 .lnk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tip.off{border-left-color:var(--line);opacity:.75}.tip button{align-self:flex-start;margin-top:4px}
 .wish .elist{margin:0 -4px}
+/* Immobilien: Reiter als Kacheln */
+.itabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.itabs button{display:flex;align-items:center;gap:8px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:7px 9px;color:var(--muted);font-weight:600;font-size:.9rem;min-height:44px;min-width:0}
+.itabs button>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.itabs button.on{border-color:var(--accent);color:var(--ink);background:var(--raised)}
+.tic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none}
+.tic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tic.tg{background:var(--good-bg);color:var(--good)}.tic.tb{background:var(--info-bg);color:var(--info)}.tic.to{background:rgba(255,91,46,.18);color:#ff8a66}.tic.ty{background:var(--warn-bg);color:var(--warn)}.tic.tv{background:rgba(167,139,250,.16);color:#b9a6ff}
+@media(min-width:560px){.itabs{grid-template-columns:repeat(5,minmax(0,1fr))}}
+.itabs button[data-v=plan]{grid-column:1/-1}
+@media(min-width:560px){.itabs button[data-v=plan]{grid-column:auto}}

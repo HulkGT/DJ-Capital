@@ -135,9 +135,13 @@ const INC_CATS=['Firma','Gehalt','Zinsen & Dividenden','Erstattung','Sonstige Ei
 const ACC_TYPES={bank:'Bankkonto',bar:'Bargeld',depot:'Depot',sonst:'Sonstiges'};
 const LSKEY='jozic-v3';
 let S=null;
+function dedupeEbid(s){const seen={},drop=new Set();const score=t=>(t.type&&t.type!=='open'?4:0)+(t.receipt?2:0)+(t.propertyId?1:0);
+  (s.txs||[]).forEach(t=>{if(!t||!t.ebid)return;const o=seen[t.ebid];if(!o){seen[t.ebid]=t;return}if(score(t)>score(o)){drop.add(o.id);seen[t.ebid]=t}else drop.add(t.id)});
+  if(drop.size)s.txs=s.txs.filter(t=>!drop.has(t.id));return drop.size}
 function migrate(s){
   ['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes'].forEach(k=>s[k]=s[k]||[]);
   if(!s.cats||!s.cats.length)s.cats=EXP_CATS.slice();
+  dedupeEbid(s);
   if(!s.icats||!s.icats.length)s.icats=INC_CATS.slice();
   if((s.v||0)<10){
     ['Werbung & Marketing (Firma)','Mobilität','Kreditkarte','Fitness & Sport','Online-Shopping'].forEach(c=>{if(!s.cats.includes(c))s.cats.push(c)});
@@ -483,8 +487,10 @@ function mig11(){if(S.mig11)return;let n=0;S.txs.forEach(t=>{if(t.type!=='ignore
   const g=cpFromText(t.purpose||'');const ib=t.iban||g.iban;if(!ib||S.accounts.some(a=>a.iban&&normIban(a.iban)===ib))return;if(!t.iban)t.iban=ib;if(!t.name&&g.name)t.name=g.name;t.type='open';autoAssign2(t);n++});S.mig11=1;if(n)save()}
 /* Gelernte Zuordnungen: Empfänger (oder Händler aus dem Zweck) → Kategorie */
 const L_STOP=/^(pos|kartica|karticom|visa|mastercard|maestro|kupnja|kupovina|placanje|plaćanje|zahlung|kartenzahlung|lastschrift|sepa|paypal|debit|kreditkarte|girocard|ec|nr|br|ref|www|http|https|the|und|von)$/;
+const L_CHAIN=/^(ina|konzum|lidl|kaufland|plodine|spar|interspar|tifon|petrol|crodux|dm|muller|mueller|müller|rewe|aldi|edeka|penny|netto|rossmann|ikea|tommy|studenac|bauhaus|pevex|hofer|billa|shell|aral|omv|mcdonalds|amazon)$/;
 function learnKey(tx){const sg=tx.amount<0?'-':'+';const n=payeeKey(String(tx.name||'').replace(/^PayPal: /i,''));if(n&&n!=='–'&&n!=='-')return sg+'n:'+n;
-  const tok=nrm(tx.purpose||'').replace(/[^a-zčćžšđäöüß ]/g,' ').split(/\s+/).filter(w=>w.length>=3&&!L_STOP.test(w));return tok.length?sg+'p:'+tok[0]:''}
+  const tok=nrm(tx.purpose||'').split(/\s+/).map(w=>w.replace(/^[^a-z0-9čćžšđäöüß]+|[^a-z0-9čćžšđäöüß.]+$/g,'')).map(w=>w.replace(/-[a-z]?\d+$/,'')).filter(w=>w&&!/^\d+$/.test(w)&&!L_STOP.test(w));
+  if(!tok.length)return '';return sg+'p:'+(L_CHAIN.test(tok[0])?tok[0]:tok.slice(0,2).join(' '))}
 function learnLabel(k){return k.slice(3)+(k[1]==='p'?' (im Zweck)':'')}
 function learnApply(tx,v){tx.unitId='';tx.forMonth='';tx.category='';tx.propertyId='';
   if(v.t==='rent'){if(!unitOf(v.u))return false;tx.type='rent';tx.unitId=v.u;tx.forMonth=monthOf(tx.date)}
@@ -576,6 +582,14 @@ function payeeStep(d){const c=payeeDlg.cur;if(!c)return;let a=c.anchor;
   if(c.mode==='y')a=String(+a+d);else{const [y,m]=a.split('-').map(Number);const t=new Date(y,m-1+d,1);a=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')}
   payeeDlg(c.name,c.mode,a)}
 function payeeMode(v){const c=payeeDlg.cur;if(!c)return;let a=c.anchor;if(v==='y')a=a.slice(0,4);else if(v==='m'&&c.mode!=='m'){const last=S.txs.filter(t=>payeeKey(t.name)===payeeKey(c.name)&&(c.mode==='a'||t.date.startsWith(a))).map(t=>t.date).sort().pop();a=(last||todayISO()).slice(0,7)}payeeDlg(c.name,v,a)}
+function dupPairs(){const g={},out=[],ign=S.dupOk||[];S.txs.forEach(t=>{if(!t.amount||t.type==='ignore'||t.type==='loan')return;(g[t.amount.toFixed(2)]=g[t.amount.toFixed(2)]||[]).push(t)});
+  const same=(p,q)=>p.name&&q.name?nameSim(p.name,q.name):(!p.name&&!q.name&&(p.accountId||'')===(q.accountId||'')&&nrm(p.purpose||'').slice(0,20)===nrm(q.purpose||'').slice(0,20)&&!!p.purpose);
+  Object.values(g).forEach(l=>{if(l.length<2)return;l.sort((p,q)=>p.date.localeCompare(q.date));const hit=new Set();
+    for(let i=0;i<l.length;i++)for(let k=i+1;k<l.length;k++){const p=l[i],q=l[k];if(Date.parse(q.date)-Date.parse(p.date)>2*864e5)break;if(hit.has(p.id)||hit.has(q.id))continue;
+      if(same(p,q)&&!ign.includes(p.id+'~'+q.id)){out.push([p,q]);hit.add(p.id);hit.add(q.id)}}});
+  return out.sort((x,y)=>y[1].date.localeCompare(x[1].date))}
+function dupDlg(){const P=dupPairs();PAYEE_IN=true;let h;try{h=P.map(([p,q])=>'<div class="elist kvs" style="margin-bottom:10px">'+txRow(p)+txRow(q)+'<div class="erow"><span class="form" style="margin:0;flex-direction:row;flex-wrap:wrap"><button class="small primary" data-act="dupDel" data-id="'+p.id+'">Obere löschen</button><button class="small primary" data-act="dupDel" data-id="'+q.id+'">Untere löschen</button><button class="small" data-act="dupKeep" data-k="'+p.id+'~'+q.id+'">Beide behalten</button></span></div></div>').join('')}finally{PAYEE_IN=false}
+  modal('<div class="mhead"><div><h3>Doppelte prüfen</h3><small>Gleicher Betrag und Absender innerhalb von 2 Tagen</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'+(P.length?'<p class="hint">Vergleiche mit deinem Konto bei der Bank. Steht die Zahlung dort nur einmal, lösche eine.</p>'+h:'<p class="okline">Keine doppelten Umsätze gefunden.</p>'))}
 function listDlg(title,sub,l,group){
   l=l.slice().sort((a,b)=>b.date.localeCompare(a.date));const tot=l.reduce((s,t)=>s+t.amount,0);
   let body='';
@@ -625,7 +639,7 @@ function filtered(){const q=nrm(ui.q);return S.txs.filter(t=>(ui.filter==='all'|
 function txList(){const all=filtered(),l=all.slice(0,ui.limit);if(!all.length)return '<div class="empty">'+(ui.filter==='open'?'Alles zugeordnet.':'Keine Umsätze gefunden.')+'</div>';return l.map(txCard).join('')+(all.length>l.length?'<button class="more" data-act="showMore">Mehr anzeigen ('+(all.length-l.length)+')</button>':'')}
 function vTx(){
   const f=[['open','Offen'],['expense','Ausgaben'],['income','Einnahmen'],['all','Alle']];
-  return '<div class="chips">'+f.map(x=>'<button class="chipb'+(ui.filter===x[0]?' on':'')+'" data-act="filter" data-v="'+x[0]+'">'+x[1]+'</button>').join('')+'</div>'+(ui.filter==='open'&&S.txs.some(t=>t.type==='open')?'<button data-act="reassignOpen">Automatisch zuordnen</button>':'')+'<input type="search" id="txq" placeholder="Suchen" value="'+esc(ui.q)+'"><div id="txlist" class="txs">'+txList()+'</div>';
+  return '<div class="chips">'+f.map(x=>'<button class="chipb'+(ui.filter===x[0]?' on':'')+'" data-act="filter" data-v="'+x[0]+'">'+x[1]+'</button>').join('')+'</div>'+(ui.filter==='open'&&S.txs.some(t=>t.type==='open')?'<button data-act="reassignOpen">Automatisch zuordnen</button>':'')+(dupPairs().length?'<button data-act="dupFind">Doppelte prüfen ('+dupPairs().length+')</button>':'')+'<input type="search" id="txq" placeholder="Suchen" value="'+esc(ui.q)+'"><div id="txlist" class="txs">'+txList()+'</div>';
 }
 function expDetail(list){
   if(!list.length)return '<div class="empty sm">Keine Ausgaben.</div>';
@@ -659,7 +673,7 @@ function unitDetail(id){
   modal('<div class="mhead"><div><h3>'+esc(unitLabel(u))+'</h3><small>'+esc(u.tenant||'Kein Mieter')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'+strip+'<div class="kvs">'+kv('Miete / Monat',u.rent?eur(u.rent):'')+kv('Fällig am',u.rent?u.dueDay+'. des Monats':'')+kv('Kaution',u.deposit?eur(u.deposit):'')+kv('Vertrag bis',dfmt(u.contractEnd))+warn+kv('IBAN',esc(u.iban))+'</div>'+(u.note?'<p class="note">'+esc(u.note)+'</p>':'')+'<button class="wide" data-act="checklist" data-id="'+u.id+'">Mieterwechsel-Checkliste ›</button><div class="mact"><button class="danger" data-act="delUnit" data-id="'+u.id+'">Löschen</button><button class="primary" data-act="editUnit" data-id="'+u.id+'">Bearbeiten</button></div>');
 }
 /* ---------- Immobilien: Unterbereiche ---------- */
-const IMMO_SEG=[['miete','Miete'],['zaehler','Zähler'],['plan','Modernisierung'],['ruecklage','Rücklagen'],['infos','Infos']];
+const IMMO_SEG=[['miete','Miete','g','<path d="M3 7h18v10H3zM7 12h.01M17 12h.01"/><circle cx="12" cy="12" r="2.2"/>'],['zaehler','Zähler','b','<path d="M4 16a8 8 0 1 1 16 0M12 16l4-5M3 20h18"/>'],['plan','Modernisierungsplan','o','<path d="M14 6l4 4-9 9H5v-4zM13 7l4 4M4 4l4 4M4 8l4-4"/>'],['ruecklage','Rücklagen','y','<path d="M4 12a7 5.5 0 0 1 14-1.5l2 .5v3l-2 .8a7 5.5 0 0 1-2 2.2V19h-3v-1.5h-2V19H8v-2a6 5 0 0 1-4-5zM9 8.5h3"/>'],['infos','Infos','v','<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>']];
 const MICON={Wasser:'<path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/>',Strom:'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',Gas:'<path d="M12 3c1 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-4 3-6 1 2 2 3 3 3 0-3-1-5 0-8z"/>',Heizung:'<path d="M5 20V8M9 20V8M13 20V8M17 20V8M3 20h18M3 8h18"/>'};
 function vZaehler(){const L=S.meterDevs||[];
   return '<div class="h2row"><h3>Zähler für Wasser, Strom und Gas</h3><button class="primary" data-act="addMeterDev">+ Zähler</button></div><p class="hint">Tippe auf einen Zähler, um einen neuen Stand einzutragen.</p>'
@@ -668,7 +682,7 @@ function vZaehler(){const L=S.meterDevs||[];
     return '<section class="group"><h3 class="gt">'+esc(p.name)+' · '+kind+'</h3><div class="list">'+l.map(m=>{const r=(m.readings||[]).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
       return '<button class="item plan" data-act="meter" data-id="'+m.id+'"><span class="picon mk-'+(MKIND[m.kind]||'')+'" aria-hidden="true"><svg viewBox="0 0 24 24">'+(MICON[m.kind]||MICON.Wasser)+'</svg></span><span class="it"><strong>'+esc(m.kind)+' · '+esc(m.place||'')+'</strong><small>'+(m.number?'Nr. '+esc(m.number):m.omm?'OMM '+esc(m.omm):m.note?esc(m.note):'Zählernummer fehlt')+(r?' · abgelesen '+dfmt(r.date):' · noch kein Stand')+'</small></span><span class="ir"><span class="num big">'+(r?esc(r.value):'–')+'</span><small class="lnk">Stand eintragen ›</small></span></button>'}).join('')+'</div></section>'}).join('')}).join(''):'<div class="empty">Noch keine Zähler. Lege mit „+ Zähler“ deinen ersten Wasser- oder Stromzähler an.</div>');
 }
-const immoSeg=()=>'<div class="seg">'+IMMO_SEG.map(x=>'<button data-act="immo" data-v="'+x[0]+'"'+((ui.immo||'miete')===x[0]?' class="on"':'')+'>'+x[1]+'</button>').join('')+'</div>';
+const immoSeg=()=>'<div class="itabs" role="tablist">'+IMMO_SEG.map(x=>'<button role="tab" data-act="immo" data-v="'+x[0]+'"'+((ui.immo||'miete')===x[0]?' class="on" aria-selected="true"':'')+'><span class="tic t'+x[2]+'"><svg viewBox="0 0 24 24" aria-hidden="true">'+x[3]+'</svg></span><span>'+x[1]+'</span></button>').join('')+'</div>';
 const propExp=(pid,y)=>-S.txs.filter(t=>t.type==='expense'&&t.propertyId===pid&&t.date.startsWith(String(y))).reduce((s,t)=>s+t.amount,0);
 const allImmoExp=y=>-S.txs.filter(t=>t.type==='expense'&&propOf(t.propertyId)&&t.date.startsWith(String(y))).reduce((s,t)=>s+t.amount,0);
 const PRIO={Hoch:'late',Mittel:'partial',Niedrig:'pending'};
@@ -1019,6 +1033,9 @@ document.addEventListener('click',e=>{
   case 'delRem':S.reminders=(S.reminders||[]).filter(x=>x.id!==id);go();return;
   case 'toggleImmo':S.settings=S.settings||{};S.settings.immo=!immoOn();go();toast(immoOn()?'Immobilien sind eingeschaltet.':'Immobilien sind ausgeblendet. Deine Daten bleiben gespeichert.');return;
   case 'immoAsk':S.settings=S.settings||{};S.settings.immo=b.dataset.v==='1';closeModal();go();return;
+  case 'dupFind':dupDlg();return;
+  case 'dupDel':S.txs=S.txs.filter(t=>t.id!==id);save();render();dupDlg();return;
+  case 'dupKeep':S.dupOk=S.dupOk||[];S.dupOk.push(b.dataset.k);save();render();dupDlg();return;
   case 'delLearn':if(S.learn)delete S.learn[b.dataset.k];go();return;
   case 'toggleRemind':S.settings=S.settings||{};S.settings.remind=S.settings.remind===false;go();return;
   case 'checklist':clDlg(id);return;
@@ -1290,9 +1307,17 @@ async function bkCallback(cb){let st=null;try{st=JSON.parse(localStorage.getItem
   save();render();
   if(!accounts.length){toast('Verbunden, aber die Bank hat keine Konten geliefert. Ist das Konto bei Enable Banking freigeschaltet (Linked Accounts)?');return}
   await bkFetch(true);bkSchedPush(true).then(()=>render())}
+function nameSim(x,y){const A=payeeKey(x).split(' ').filter(w=>w.length>1),B=payeeKey(y).split(' ').filter(w=>w.length>1);if(!A.length||!B.length)return false;const [s,l]=A.length<=B.length?[A,B]:[B,A];return s.length>=2?s.every(w=>l.includes(w)):(l.length<=2&&l.includes(s[0]))}
+const txSig=(acc,t)=>[acc||'',t.amount.toFixed(2),nrm(t.name||''),nrm(t.purpose||'')].join('|');
 function bkIngest(a,txs,bals,T){let added=0,auto=0,dup=0;const used=new Set();
-  for(const x of txs){if(x.status==='PDNG'||x.status==='PNDG')continue;const t=bkMap(x);if(!t.amount)continue;
+  const inc=txs.filter(x=>x.status!=='PDNG'&&x.status!=='PNDG').map(bkMap),incIds=new Set(inc.map(t=>t.ebid));
+  for(const t of inc){if(!t.amount)continue;
     if(S.txs.some(y=>y.ebid===t.ebid)){dup++;continue}
+    {const sg=txSig(a.accId,t),d0=Date.parse(t.date),long=(t.name+t.purpose).length>=6;
+      const tw=S.txs.find(y=>y.ebid&&!incIds.has(y.ebid)&&!used.has(y.id)&&(y.accountId||'')===(a.accId||'')&&txSig(y.accountId,y)===sg&&Math.abs(Date.parse(y.date)-d0)<=(long?2:0)*864e5);
+      if(tw){used.add(tw.id);dup++;continue}
+      const cx=t.name&&S.txs.find(y=>!used.has(y.id)&&(y.accountId||'')!==(a.accId||'')&&y.type!=='ignore'&&y.date===t.date&&Math.abs(y.amount-t.amount)<0.005&&(!y.ebid||!incIds.has(y.ebid))&&nameSim(y.name,t.name));
+      if(cx){used.add(cx.id);dup++;continue}}
     const m=bkFuzzy(a.accId,t.amount,t.date,used,y=>!y.ebid);if(m){used.add(m.id);m.ebid=t.ebid;dup++;continue}
     const tx={id:uid(),key:txKey(t),ebid:t.ebid,src:'bank',date:t.date,amount:t.amount,name:t.name,iban:t.iban,purpose:t.purpose,type:'open',unitId:'',propertyId:'',category:'',forMonth:'',accountId:a.accId};
     if(autoAssign2(tx)){auto++;if(tx.type==='rent')dedupeExcel(tx)}S.txs.push(tx);added++}
@@ -1494,6 +1519,7 @@ function exportS(){const o=JSON.parse(JSON.stringify(S));if(o.settings)delete o.
 const hasData=s=>!!s&&ARR_KEYS.some(k=>Array.isArray(s[k])&&s[k].length);
 function mergeInto(local,server){/* Neues vom anderen Gerät übernehmen, eigene Änderungen behalten */
   ARR_KEYS.forEach(k=>{const L=local[k]=local[k]||[];const ids=new Set(L.map(x=>x&&x.id).filter(Boolean));(server[k]||[]).forEach(x=>{if(x&&x.id&&!ids.has(x.id))L.push(x)})});
+  dedupeEbid(local);
   if(server.learn||local.learn)local.learn=Object.assign({},server.learn||{},local.learn||{});
   if(server.bank&&server.bank.conns){local.bank=local.bank||{conns:[]};local.bank.conns=local.bank.conns||[];const sid=new Set(local.bank.conns.map(c=>c.sid));server.bank.conns.forEach(c=>{if(!sid.has(c.sid))local.bank.conns.push(c)});local.bank.lastFetch=Math.max(local.bank.lastFetch||0,server.bank.lastFetch||0)}
   (server.cats||[]).forEach(c=>{if(!(local.cats||[]).includes(c))(local.cats=local.cats||[]).push(c)});
@@ -1651,3 +1677,7 @@ I18N.push(['Immobilien verwenden','Use properties','Koristi nekretnine'],['Hast 
 I18N.push(['Gelernte Zuordnungen','Learned assignments','Naučena razvrstavanja'],['Noch nichts gelernt.','Nothing learned yet.','Još ništa nije naučeno.'],
  ['Ordnest du einen Umsatz zu, merkt sich die App den Empfänger. Alle offenen und alle neuen Umsätze von ihm werden genauso einsortiert.','When you assign a transaction, the app remembers the payee. All open and all new transactions from them are sorted the same way.','Kad razvrstaš transakciju, aplikacija pamti primatelja. Sve otvorene i sve nove transakcije od njega razvrstavaju se jednako.']);
 PREFIX.push(['Gemerkt. ','Remembered. ','Zapamćeno. ']);
+I18N.push(['Doppelte prüfen','Check duplicates','Provjeri duplikate'],['Eine löschen','Delete one','Obriši jednu'],['Beide behalten','Keep both','Zadrži obje'],['Keine doppelten Umsätze gefunden.','No duplicate transactions found.','Nema dvostrukih transakcija.'],
+ ['Gleicher Betrag und Absender innerhalb von 2 Tagen','Same amount and sender within 2 days','Isti iznos i pošiljatelj unutar 2 dana'],['Vergleiche mit deinem Konto bei der Bank. Steht die Zahlung dort nur einmal, lösche eine.','Compare with your bank account. If the payment appears there only once, delete one.','Usporedi s računom u banci. Ako je uplata tamo samo jednom, obriši jednu.']);
+PREFIX.push(['Doppelte prüfen (','Check duplicates (','Provjeri duplikate (']);
+I18N.push(['Obere löschen','Delete upper','Obriši gornju'],['Untere löschen','Delete lower','Obriši donju']);
