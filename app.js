@@ -294,20 +294,20 @@ function reportHtml(y){y=String(y);
   const e=s=>esc(s),E=n=>eur(Math.round(n*100)/100);
   let h='<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Jahresbericht '+y+'</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#111;max-width:820px;margin:30px auto;padding:0 20px;font-size:13px}h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 8px;border-bottom:2px solid #ff5b2e;padding-bottom:4px}h3{font-size:14px;margin:16px 0 6px}table{border-collapse:collapse;width:100%;margin:4px 0 10px}td,th{padding:5px 8px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td.r,th.r{text-align:right;white-space:nowrap}tr.sum td{font-weight:bold;border-top:2px solid #111}.muted{color:#666}@media print{h2{break-after:avoid}}</style></head><body><h1>Jahresbericht '+y+'</h1><div class="muted">'+e((S.settings&&S.settings.owner)||'')+' · erstellt am '+dfmt(todayISO())+' mit DJ Capital</div>';
   const tr=S.taxRate||{base:.7,rate:.12};let totInc=0,totOut=0;
-  h+='<h2>Immobilien</h2>';
-  S.props.forEach(p=>{const units=S.units.filter(u=>u.propertyId===p.id);const rent=L.filter(t=>t.type==='rent'&&(unitOf(t.unitId)||{}).propertyId===p.id);const ex=L.filter(t=>t.type==='expense'&&t.propertyId===p.id);
+  const IO=immoOn();if(IO)h+='<h2>Immobilien</h2>';
+  (IO?S.props:[]).forEach(p=>{const units=S.units.filter(u=>u.propertyId===p.id);const rent=L.filter(t=>t.type==='rent'&&(unitOf(t.unitId)||{}).propertyId===p.id);const ex=L.filter(t=>t.type==='expense'&&t.propertyId===p.id);
     const ri=rent.reduce((s,t)=>s+t.amount,0),eo=-ex.reduce((s,t)=>s+t.amount,0);totInc+=ri;totOut+=eo;
     h+='<h3>'+e(p.name)+'</h3><table><tr><th>Einheit</th><th>Mieter</th><th class="r">Monate bezahlt</th><th class="r">Mieteinnahmen</th></tr>'+units.map(u=>{const r=rent.filter(t=>t.unitId===u.id);const ms=new Set(r.map(t=>t.forMonth||monthOf(t.date))).size;return r.length?'<tr><td>'+e(u.name)+'</td><td>'+e(u.tenant||'')+'</td><td class="r">'+ms+'</td><td class="r">'+E(r.reduce((s,t)=>s+t.amount,0))+'</td></tr>':''}).join('')+'<tr class="sum"><td colspan="3">Summe Mieten</td><td class="r">'+E(ri)+'</td></tr></table>';
     if(ex.length)h+='<table><tr><th>Datum</th><th>Ausgabe</th><th>Kategorie</th><th class="r">Betrag</th></tr>'+ex.sort((a,b)=>a.date.localeCompare(b.date)).map(t=>'<tr><td>'+dfmt(t.date)+'</td><td>'+e(t.purpose||t.name)+(t.receipt?' (Beleg in der App)':'')+'</td><td>'+e(t.category||'')+'</td><td class="r">'+E(-t.amount)+'</td></tr>').join('')+'<tr class="sum"><td colspan="3">Summe Ausgaben</td><td class="r">'+E(eo)+'</td></tr></table>';
     const tax=ri*tr.base*tr.rate;h+='<table><tr><td>Ergebnis vor Steuer</td><td class="r"><b>'+E(ri-eo)+'</b></td></tr><tr><td class="muted">Steuer geschätzt ('+Math.round(tr.rate*100)+' % auf '+Math.round(tr.base*100)+' % der Miete)</td><td class="r muted">'+E(tax)+'</td></tr></table>'});
-  h+='<table><tr class="sum"><td>Immobilien gesamt: Einnahmen '+E(totInc)+' · Ausgaben '+E(totOut)+'</td><td class="r">'+E(totInc-totOut)+'</td></tr></table>';
-  const inc=L.filter(t=>t.type==='income'),pex=L.filter(t=>t.type==='expense'&&!propOf(t.propertyId));
+  if(IO)h+='<table><tr class="sum"><td>Immobilien gesamt: Einnahmen '+E(totInc)+' · Ausgaben '+E(totOut)+'</td><td class="r">'+E(totInc-totOut)+'</td></tr></table>';
+  const inc=L.filter(t=>t.type==='income'),pex=L.filter(t=>t.type==='expense'&&(!IO||!propOf(t.propertyId)));
   const grp=(l)=>{const m={};l.forEach(t=>{const c=t.category||'Ohne Kategorie';m[c]=(m[c]||0)+Math.abs(t.amount)});return Object.entries(m).sort((a,b)=>b[1]-a[1])};
   h+='<h2>Weitere Einnahmen</h2><table>'+grp(inc).map(([c,v])=>'<tr><td>'+e(c)+'</td><td class="r">'+E(v)+'</td></tr>').join('')+'<tr class="sum"><td>Summe</td><td class="r">'+E(inc.reduce((s,t)=>s+t.amount,0))+'</td></tr></table>';
-  h+='<h2>Private Ausgaben nach Kategorie</h2><table>'+grp(pex).map(([c,v])=>'<tr><td>'+e(c)+'</td><td class="r">'+E(v)+'</td></tr>').join('')+'<tr class="sum"><td>Summe</td><td class="r">'+E(-pex.reduce((s,t)=>s+t.amount,0))+'</td></tr></table>';
+  h+='<h2>'+(IO?'Private Ausgaben nach Kategorie':'Ausgaben nach Kategorie')+'</h2><table>'+grp(pex).map(([c,v])=>'<tr><td>'+e(c)+'</td><td class="r">'+E(v)+'</td></tr>').join('')+'<tr class="sum"><td>Summe</td><td class="r">'+E(-pex.reduce((s,t)=>s+t.amount,0))+'</td></tr></table>';
   const lo=loans().filter(o=>o.l.some(inY));if(lo.length)h+='<h2>Verliehenes Geld</h2><table>'+lo.map(o=>'<tr><td>'+e(o.p)+'</td><td class="r">'+(Math.abs(o.open)<0.01?'zurückgezahlt':'offen '+E(o.open))+'</td></tr>').join('')+'</table>';
   h+='<h2>Kontostände</h2><table>'+S.accounts.map(a=>{const v=(a.history||[]).filter(x=>x.date<=y+'-12-31').sort((p,q)=>p.date.localeCompare(q.date)).pop();return '<tr><td>'+e(a.name)+'</td><td class="muted">'+(v?'Stand '+dfmt(v.date):'')+'</td><td class="r">'+(v?E(v.value):'–')+'</td></tr>'}).join('')+'</table>';
-  h+='<p class="muted">Die Steuerwerte sind eine Schätzung aus der App und ersetzen keine Steuerberatung.</p></body></html>';
+  if(IO)h+='<p class="muted">Die Steuerwerte sind eine Schätzung aus der App und ersetzen keine Steuerberatung.</p></body></html>';
   return h;
 }
 async function saveReport(){const y=+$('#f-ry').value;const dl=await getDl();const html=trHtml(reportHtml(y));
@@ -498,10 +498,11 @@ function autoAssign2(tx){
 }
 /* ---------- Rahmen ---------- */
 const TABS=[['start','Übersicht','home'],['geld','Ausgaben','geld'],['immo','Immobilien','immo'],['konten','Konten','konten'],['mehr','Mehr','more']];
-function curTab(){const t=(location.hash||'#start').slice(1).split('/')[0];return TABS.some(x=>x[0]===t)?t:'start'}
+const immoOn=()=>!(S&&S.settings&&S.settings.immo===false);
+function curTab(){const t=(location.hash||'#start').slice(1).split('/')[0];return TABS.some(x=>x[0]===t)&&(t!=='immo'||immoOn())?t:'start'}
 function render(){if(locked||authOpen)return;document.body.classList.toggle('hide',!!ui.hide);
   const cur=curTab(),openN=S.txs.filter(t=>t.type==='open').length;
-  const nav=TABS.map(t=>'<a href="#'+t[0]+'"'+(t[0]===cur?' class="on" aria-current="page"':'')+'>'+ICON[t[2]]+'<span>'+t[1]+'</span>'+(t[0]==='geld'&&openN?'<b class="badge">'+openN+'</b>':'')+'</a>').join('');
+  const nav=TABS.filter(t=>t[0]!=='immo'||immoOn()).map(t=>'<a href="#'+t[0]+'"'+(t[0]===cur?' class="on" aria-current="page"':'')+'>'+ICON[t[2]]+'<span>'+t[1]+'</span>'+(t[0]==='geld'&&openN?'<b class="badge">'+openN+'</b>':'')+'</a>').join('');
   const V={start:vStart,geld:vGeld,immo:vImmo,konten:vKonten,mehr:vMehr};
   $('#root').innerHTML='<header class="top"><div class="logo" aria-hidden="true"><span>DJ</span></div><div class="brand">My Capital<small>by DJ Capital</small></div><span class="savest" id="savest" aria-live="polite"></span><button class="ic eye'+(ui.hide?' on':'')+'" data-act="hide" aria-pressed="'+(ui.hide?'true':'false')+'" aria-label="'+(ui.hide?'Beträge zeigen':'Beträge verstecken')+'" title="'+(ui.hide?'Beträge zeigen':'Beträge verstecken')+'">'+(ui.hide?'<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 6.1A9.9 9.9 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.7 3.3M6.2 7.6A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 3.9-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>':'<svg viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="3"/></svg>')+'</button></header><main class="stack">'+V[cur]()+'</main><nav class="bar" aria-label="Bereiche">'+nav+'</nav><input type="file" id="f-file" accept=".csv,.txt,.pdf,text/csv,application/pdf" hidden><input type="file" id="f-receipt" accept="image/*" capture="environment" hidden>';
 }
@@ -570,11 +571,11 @@ function vGeld(){
   if(ui.geld==='umsaetze')return '<div class="h2row"><h2>Umsätze</h2><button class="primary" data-act="pickFile">Hochladen</button></div>'+seg+vTx();
   if(ui.geld==='jahr')return '<div class="h2row"><h2>Ausgaben</h2></div>'+seg+vYear();
   const m=monthSums(ui.month),ex=m.l.filter(t=>t.type==='expense');
-  const priv=ex.filter(t=>!propOf(t.propertyId)),imm=ex.filter(t=>propOf(t.propertyId));
+  const IO=immoOn(),priv=ex.filter(t=>!IO||!propOf(t.propertyId)),imm=IO?ex.filter(t=>propOf(t.propertyId)):[];
   const cats=byCat(priv),max=cats.length?cats[0][1]:1;
   return '<div class="h2row"><h2>Ausgaben</h2></div>'+seg+monthBar()
-  +'<section class="tiles3"><div><span>Privat</span><b class="num neg">'+eur(Math.round(-priv.reduce((s,t)=>s+t.amount,0)))+'</b></div><div><span>Immobilien</span><b class="num neg">'+eur(Math.round(-imm.reduce((s,t)=>s+t.amount,0)))+'</b></div><div><span>Einnahmen</span><b class="num pos">'+eur(Math.round(m.inc))+'</b></div></section>'
-  +(cats.length?'<section class="card"><h3>Privat nach Kategorie</h3>'+bars(cats,max,'mp:'+ui.month)+'</section>':'<div class="empty">Keine privaten Ausgaben in diesem Monat.</div>')
+  +'<section class="tiles3'+(IO?'':' two')+'"><div><span>'+(IO?'Privat':'Ausgaben')+'</span><b class="num neg">'+eur(Math.round(-priv.reduce((s,t)=>s+t.amount,0)))+'</b></div>'+(IO?'<div><span>Immobilien</span><b class="num neg">'+eur(Math.round(-imm.reduce((s,t)=>s+t.amount,0)))+'</b></div>':'')+'<div><span>Einnahmen</span><b class="num pos">'+eur(Math.round(m.inc))+'</b></div></section>'
+  +(cats.length?'<section class="card"><h3>'+(IO?'Privat nach Kategorie':'Ausgaben nach Kategorie')+'</h3>'+bars(cats,max,'mp:'+ui.month)+'</section>':'<div class="empty">Keine privaten Ausgaben in diesem Monat.</div>')
   +(imm.length?'<details class="obj"><summary><span class="it"><strong>Ausgaben für Immobilien</strong><small>'+imm.length+' Buchungen</small></span><span class="chev">›</span></summary>'+expDetail(imm)+'</details>':'');
 }
 function vYear(){
@@ -591,13 +592,13 @@ function vYear(){
 function assignSelect(t){
   const v=t.type==='rent'?'rent:'+t.unitId:t.type==='expense'?'exp:'+t.category:t.type==='income'?'inc:'+t.category:t.type;
   const og=(lab,arr,pre)=>'<optgroup label="'+lab+'">'+arr.map(c=>'<option value="'+pre+esc(c)+'"'+sel(v===pre+c)+'>'+esc(c)+'</option>').join('')+'</optgroup>';
-  const rent='<optgroup label="Miete von">'+S.units.filter(u=>u.rent>0).map(u=>'<option value="rent:'+u.id+'"'+sel(v==='rent:'+u.id)+'>'+esc(unitLabel(u))+'</option>').join('')+'</optgroup>';
+  const rent=!immoOn()&&t.type!=='rent'?'':'<optgroup label="Miete von">'+S.units.filter(u=>u.rent>0).map(u=>'<option value="rent:'+u.id+'"'+sel(v==='rent:'+u.id)+'>'+esc(unitLabel(u))+'</option>').join('')+'</optgroup>';
   const cats=S.cats.slice();if(t.type==='expense'&&t.category&&!cats.includes(t.category))cats.push(t.category);
   const ic=S.icats.slice();if(t.type==='income'&&t.category&&!ic.includes(t.category))ic.push(t.category);
   return '<select data-tx="'+t.id+'" data-f="assign" aria-label="Zuordnung"><option value="open"'+sel(v==='open')+'>Nicht zugeordnet</option>'+(t.amount>0?rent+og('Einnahme',ic,'inc:')+og('Ausgabe (Rückbuchung)',cats,'exp:'):og('Ausgabe',cats,'exp:')+og('Einnahme',ic,'inc:')+rent)+'<option value="loan"'+sel(v==='loan')+'>Geld verliehen / zurückbekommen</option><option value="ignore"'+sel(v==='ignore')+'>Umbuchung / ignorieren</option></select>';
 }
 function txCard(t){
-  const extra=t.type==='expense'?'<select data-tx="'+t.id+'" data-f="propertyId" aria-label="Wofür"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'"'+sel(p.id===t.propertyId)+'>Immobilie: '+esc(p.name)+'</option>').join('')+'</select>':'';
+  const extra=t.type==='expense'&&(immoOn()||t.propertyId)?'<select data-tx="'+t.id+'" data-f="propertyId" aria-label="Wofür"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'"'+sel(p.id===t.propertyId)+'>Immobilie: '+esc(p.name)+'</option>').join('')+'</select>':'';
   const acc=accOf(t.accountId);
   return '<div class="tx '+t.type+'"><div class="txt"><div class="txh"><strong>'+esc(t.name||'–')+recChip(t)+'</strong><span class="num '+(t.amount<0?'neg':'pos')+'">'+eur(t.amount)+'</span></div><small>'+dfmt(t.date)+(acc?' · '+esc(acc.name):'')+(t.purpose?' · '+esc(t.purpose):'')+'</small></div><div class="txa">'+assignSelect(t)+extra+'</div></div>';
 }
@@ -738,9 +739,9 @@ const MEHR_P={
  report:()=>'<section class="group"><p class="hint">Alle Zahlen eines Jahres als Datei, zum Ausdrucken oder für den Steuerberater.</p><button data-act="report">Jahresbericht erstellen</button></section>',
  remind:()=>'<section class="group"><div class="h2row"><span></span><button class="small" data-act="toggleRemind">'+(S.settings&&S.settings.remind===false?'Auf Übersicht zeigen':'Auf Übersicht ausblenden')+'</button></div><p class="hint">Kündigungsfristen, fehlende Mieten und geplante Modernisierungen erkennt die App selbst. Hier legst du eigene Termine an, zum Beispiel Versicherungen oder Komunalna naknada.</p><div class="list">'+(S.reminders||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>'<div class="item static"><span class="it"><strong>'+esc(x.title)+'</strong><small>'+dfmt(x.date)+(x.repeat==='yearly'?' · jährlich':x.repeat==='monthly'?' · monatlich':'')+'</small></span><button class="ic" data-act="delRem" data-id="'+x.id+'" aria-label="Erinnerung löschen">×</button></div>').join('')+'</div><button data-act="addRem">+ Erinnerung</button></section>',
  rules:()=>'<section class="group"><h3>Automatische Regeln</h3><p class="hint">Steht das Stichwort im Umsatz, wird er beim Abruf oder Hochladen automatisch einsortiert.</p><div class="list">'+S.rules.map((r,i)=>'<div class="item static"><span class="it"><strong>'+esc(r.keyword)+'</strong><small>'+esc(r.category)+(r.propertyId?' · '+esc((propOf(r.propertyId)||{}).name||''):'')+'</small></span><button class="ic" data-act="delRule" data-i="'+i+'" aria-label="Regel löschen">×</button></div>').join('')+'</div>'
-  +'<div class="form"><input id="f-rkw" placeholder="Stichwort, z. B. REWE"><select id="f-rcat"><optgroup label="Ausgabe">'+S.cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup><optgroup label="Einnahme">'+S.icats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup></select><select id="f-rprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'">Immobilie: '+esc(p.name)+'</option>').join('')+'</select><button data-act="addRule">Regel hinzufügen</button></div></section>'
+  +'<div class="form"><input id="f-rkw" placeholder="Stichwort, z. B. REWE"><select id="f-rcat"><optgroup label="Ausgabe">'+S.cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup><optgroup label="Einnahme">'+S.icats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup></select>'+(immoOn()?'<select id="f-rprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'">Immobilie: '+esc(p.name)+'</option>').join('')+'</select>':'')+'<button data-act="addRule">Regel hinzufügen</button></div></section>'
   +'<section class="group"><h3>Kategorien für Ausgaben</h3><div class="chips">'+S.cats.map((c,i)=>'<span class="chip">'+esc(c)+'<button data-act="delCat" data-i="'+i+'" aria-label="'+esc(c)+' entfernen">×</button></span>').join('')+'</div><div class="form"><input id="f-cat" placeholder="Neue Kategorie"><button data-act="addCat">Hinzufügen</button></div></section>',
- acct:()=>acctSection()+'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
+ acct:()=>acctSection()+'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><div class="h2row" style="margin-top:6px"><span>Immobilien verwenden</span><button class="small'+(immoOn()?' primary':'')+'" data-act="toggleImmo">'+(immoOn()?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Für vermietete Wohnungen und Häuser: Mieteingang, Mieter, Zähler, Modernisierung. Wenn du keine hast, schalte den Bereich aus. Es wird nichts gelöscht.</p><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
   +'<section class="group"><h3>Backup</h3><p class="hint">'+(loggedIn()?'Deine Daten werden verschlüsselt mit deinem Konto synchronisiert. Ein zusätzliches Backup schadet trotzdem nicht.':'Die Daten liegen nur auf diesem Gerät. Speichere regelmäßig ein Backup, zum Beispiel in Google Drive.')+'</p><div class="form"><button data-act="copyBackup">Backup speichern</button><button data-act="restoreDlg">Backup einspielen</button></div></section>'
 };
 /* ---------- Formulare ---------- */
@@ -754,7 +755,7 @@ function editUnit(id){
 }
 function manualDlg(kind){
   const cats=kind==='income'?S.icats:S.cats;
-  modal('<h3>'+(kind==='income'?'Einnahme':'Ausgabe')+' eintragen</h3><div class="grid2"><label>Datum<input id="f-date" type="date" value="'+todayISO()+'"></label><label>Betrag (€)<input id="f-amt" inputmode="decimal" placeholder="z. B. 120,00"></label><label>Kategorie<select id="f-ecat">'+cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</select></label>'+(kind==='income'?'':'<label>Wofür<select id="f-eprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'">Immobilie: '+esc(p.name)+'</option>').join('')+'</select></label>')+'</div><label>Beschreibung<input id="f-desc"></label><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveManual" data-v="'+kind+'">Speichern</button></div>');
+  modal('<h3>'+(kind==='income'?'Einnahme':'Ausgabe')+' eintragen</h3><div class="grid2"><label>Datum<input id="f-date" type="date" value="'+todayISO()+'"></label><label>Betrag (€)<input id="f-amt" inputmode="decimal" placeholder="z. B. 120,00"></label><label>Kategorie<select id="f-ecat">'+cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</select></label>'+(kind==='income'||!immoOn()?'':'<label>Wofür<select id="f-eprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'">Immobilie: '+esc(p.name)+'</option>').join('')+'</select></label>')+'</div><label>Beschreibung<input id="f-desc"></label><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveManual" data-v="'+kind+'">Speichern</button></div>');
 }
 /* ---------- PDF ---------- */
 const PDFJS='./lib/';
@@ -997,6 +998,8 @@ document.addEventListener('click',e=>{
   case 'addRem':remDlg();return;
   case 'saveRem':{const t=$('#f-rt').value.trim();if(!t){toast('Bitte eingeben, woran erinnert werden soll.');return}S.reminders=S.reminders||[];S.reminders.push({id:uid(),title:t,date:$('#f-rdt').value||todayISO(),repeat:$('#f-rrep').value,lead:parseInt($('#f-rlead').value,10)||30});closeModal();go();return}
   case 'delRem':S.reminders=(S.reminders||[]).filter(x=>x.id!==id);go();return;
+  case 'toggleImmo':S.settings=S.settings||{};S.settings.immo=!immoOn();go();toast(immoOn()?'Immobilien sind eingeschaltet.':'Immobilien sind ausgeblendet. Deine Daten bleiben gespeichert.');return;
+  case 'immoAsk':S.settings=S.settings||{};S.settings.immo=b.dataset.v==='1';closeModal();go();return;
   case 'toggleRemind':S.settings=S.settings||{};S.settings.remind=S.settings.remind===false;go();return;
   case 'checklist':clDlg(id);return;
   case 'clKind':clDlg(id,b.dataset.v);return;
@@ -1185,7 +1188,7 @@ applyLang();trStart();
 /* ---------- Schnellbefehle (langes Drücken aufs App-Symbol) ---------- */
 let GO=null;try{const q=new URLSearchParams(location.search);GO=q.get('go');if(GO)history.replaceState(null,'',location.pathname+location.hash)}catch(e){}
 function runGo(){const g=GO;GO=null;if(!g)return;
-  if(g==='miete'){ui.immo='miete';saveUi();if(location.hash!=='#immo')location.hash='#immo';else render();return}
+  if(g==='miete'&&immoOn()){ui.immo='miete';saveUi();if(location.hash!=='#immo')location.hash='#immo';else render();return}
   if(location.hash&&location.hash!=='#start'){location.hash='#start'}
   setTimeout(()=>{
     if(g==='ausgabe')manualDlg('expense');
@@ -1608,3 +1611,15 @@ PREFIX.push(['Sparplan ansehen · ','View savings plan · ','Pogledaj plan šted
 I18N.push(['Was bleibt im Monat übrig?','What is left per month?','Što ostaje mjesečno?'],['Eigener Betrag pro Monat (€)','Own amount per month (€)','Vlastiti iznos mjesečno (€)'],['Zurück','Back','Natrag'],['Einnahmen und Ausgaben','Income and expenses','Prihodi i rashodi'],['Bleibt jetzt ›','Left now ›','Sada ostaje ›']);
 I18N.push(['Zählt','Counts','Računa se'],['Zählt nicht','Not counted','Ne računa se'],['Übliche Ausgaben','Usual expenses','Uobičajeni rashodi'],['Bleibt im Monat','Left per month','Ostaje mjesečno'],['Regelmäßige Einnahmen minus übliche Ausgaben','Regular income minus usual expenses','Redoviti prihodi minus uobičajeni rashodi']);
 PREFIX.push(['Regelmäßige Einnahmen · ','Regular income · ','Redoviti prihodi · '],['Einmalig oder unregelmäßig','One-off or irregular','Jednokratno ili neredovito']);
+/* Immobilien aus: keine Miet-/Vertrags-/Modernisierungs-Hinweise, keine Rücklagen-Tipps */
+{const _r=remindItems;remindItems=function(){if(immoOn())return _r();const u=S.units,p=S.plans;S.units=[];S.plans=[];try{return _r()}finally{S.units=u;S.plans=p}}}
+{const _c=cashTips;cashTips=function(){if(immoOn())return _c();const r=S.reserve,p=S.plans;S.reserve=null;S.plans=[];try{return _c()}finally{S.reserve=r;S.plans=p}}}
+function immoAsk(){if(!S||locked||authOpen)return;S.settings=S.settings||{};if(S.settings.immo!=null)return;
+  if(S.props.length||S.units.length){S.settings.immo=true;return}
+  if(!$('#modal')||!$('#modal').hidden||BK_CB)return;
+  modal('<h3>Hast du vermietete Immobilien?</h3><p class="hint">Dann zeigt die App einen eigenen Bereich für Mieteingang, Mieter, Zähler und Modernisierung. Du kannst das später unter Mehr → Konto, Sicherheit & Backup ändern.</p><div class="mact"><button data-act="immoAsk" data-v="0">Nein</button><button class="primary" data-act="immoAsk" data-v="1">Ja</button></div>')}
+{const _rg2=runGo;runGo=function(){_rg2();setTimeout(immoAsk,1200)}}
+I18N.push(['Immobilien verwenden','Use properties','Koristi nekretnine'],['Hast du vermietete Immobilien?','Do you have rental properties?','Imaš li nekretnine u najmu?'],['Ja','Yes','Da'],['Nein','No','Ne'],['Ausgaben nach Kategorie','Expenses by category','Rashodi po kategoriji'],
+ ['Immobilien sind eingeschaltet.','Properties are switched on.','Nekretnine su uključene.'],['Immobilien sind ausgeblendet. Deine Daten bleiben gespeichert.','Properties are hidden. Your data stays saved.','Nekretnine su skrivene. Tvoji podaci ostaju spremljeni.'],
+ ['Für vermietete Wohnungen und Häuser: Mieteingang, Mieter, Zähler, Modernisierung. Wenn du keine hast, schalte den Bereich aus. Es wird nichts gelöscht.','For rented flats and houses: rent received, tenants, meters, modernisation. If you have none, switch the section off. Nothing is deleted.','Za iznajmljene stanove i kuće: najam, najmoprimci, brojila, modernizacija. Ako ih nemaš, isključi ovaj dio. Ništa se ne briše.'],
+ ['Dann zeigt die App einen eigenen Bereich für Mieteingang, Mieter, Zähler und Modernisierung. Du kannst das später unter Mehr → Konto, Sicherheit & Backup ändern.','Then the app shows a separate section for rent, tenants, meters and modernisation. You can change this later under More → Account, security & backup.','Tada aplikacija prikazuje poseban dio za najam, najmoprimce, brojila i modernizaciju. To možeš kasnije promijeniti pod Više → Račun, sigurnost i sigurnosna kopija.']);
