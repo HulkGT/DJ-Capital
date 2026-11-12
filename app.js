@@ -136,7 +136,7 @@ const ACC_TYPES={bank:'Bankkonto',bar:'Bargeld',depot:'Depot',sonst:'Sonstiges'}
 const LSKEY='jozic-v3';
 let S=null;
 function migrate(s){
-  ['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders'].forEach(k=>s[k]=s[k]||[]);
+  ['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes'].forEach(k=>s[k]=s[k]||[]);
   if(!s.cats||!s.cats.length)s.cats=EXP_CATS.slice();
   if(!s.icats||!s.icats.length)s.icats=INC_CATS.slice();
   if((s.v||0)<10){
@@ -348,7 +348,7 @@ function ampel(){const a=last3();if(!a.inc&&!a.out)return {c:'grey',t:'Noch zu w
   return {c:'red',t:'Achtung',d:'Du gibst im Schnitt '+eur(Math.round(a.out-a.inc))+' mehr aus, als reinkommt.',a};
 }
 function ampelCard(){const x=ampel();
-  return '<section class="card ampel '+x.c+'"><div class="alight" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="atext"><div class="hl">Dein Stand · letzte 3 Monate</div><strong>'+x.t+'</strong><p>'+esc(x.d)+'</p><div class="form"><button data-act="tipsSave">Wo kann ich sparen?</button><button data-act="tipsCash">Was tun mit dem Geld?</button></div></div></section>';
+  return '<section class="card ampel '+x.c+'"><div class="alight" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="atext"><div class="hl">Dein Stand · letzte 3 Monate</div><strong>'+x.t+'</strong><p>'+esc(x.d)+'</p><div class="form"><button data-act="wishPlan">Wo kann ich sparen?</button><button data-act="tipsCash">Was tun mit dem Geld?</button></div></div></section>';
 }
 const mkey=t=>nrm(t.name||'').replace(/^paypal: /,'').replace(/[^a-z ]/g,' ').trim().split(/\s+/).slice(0,2).join(' ');
 function saveTips(){
@@ -378,6 +378,50 @@ function cashTips(){
   items.push({h:'Danach: anlegen',ok:null,d:'Übliche Möglichkeiten für Geld, das du länger nicht brauchst: Tagesgeld oder Festgeld (sicher, wenig Zinsen), breit gestreute ETFs (langfristig, schwankt), Sondertilgung eines Kredits (sicherer „Zins“ in Höhe des Kreditzinses). Was zu dir passt, hängt von deinen Zielen und deinem Risiko ab.'});
   modal('<div class="mhead"><div><h3>Was tun mit dem Geld?</h3><small>'+(free>0?'Etwa '+eur(Math.round(free))+' über dem Notgroschen':'Der Notgroschen ist noch nicht voll')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div><div class="tips">'+items.map(i=>'<div class="tip'+(i.ok===true?' done':'')+'"><b>'+(i.ok===true?'✓ ':'')+esc(i.h)+'</b><span>'+esc(i.d)+'</span></div>').join('')+'</div><p class="hint">Das ist eine Reihenfolge, wie sie in Ratgebern üblich ist, keine Anlageberatung. Für größere Beträge lohnt sich ein unabhängiger Honorarberater.</p>');
 }
+/* ---------- Wunschliste & Sparplan ---------- */
+const SAVE_FIX=/wohnen|steuer|versicherung|kredit|gesundheit|firma|komunalna|müll|hrt|familie|reparatur|klima/i;
+function saveRule(c,mode,l){const ag=mode==='a',n=l.length,sum=-l.reduce((s,t)=>s+t.amount,0),avg=sum/3;
+  if(/kreditkarte/i.test(c))return null;
+  if(/restaurant|freizeit/i.test(c)){if(!ag)return {cut:avg*0.3,how:'Etwa ein Drittel weniger: seltener essen gehen, öfter zu Hause kochen.'};
+    const one=Math.min(avg,sum/Math.max(n,1));return {cut:Math.max(0,avg-one),how:'Zu Hause kochen. Höchstens 1-mal im Monat ins Restaurant (etwa '+eur(Math.round(one))+').'}}
+  if(/abo|handy|internet/i.test(c))return ag?{cut:avg*0.5,how:'Alle Abos kündigen oder pausieren, die du nicht täglich brauchst. Handy- und Internettarif auf den günstigsten umstellen.'}:{cut:avg*0.15,how:'Abos durchgehen: Was du seit einem Monat nicht benutzt hast, kündigen.'};
+  if(/kleidung|shopping/i.test(c))return ag?{cut:avg*0.9,how:'Kaufstopp, bis der Wunsch erfüllt ist. Nur ersetzen, was kaputt ist.'}:{cut:avg*0.3,how:'Nur gezielt kaufen, keine Spontankäufe. 24 Stunden warten, bevor du bestellst.'};
+  if(/reise/i.test(c))return ag?{cut:avg*0.8,how:'Urlaub verschieben oder günstig bei Familie verbringen.'}:{cut:avg*0.25,how:'Früher buchen, Nebensaison, kürzere Reisen.'};
+  if(/lebensmittel/i.test(c))return ag?{cut:avg*0.15,how:'Wochenplan und Einkaufszettel, Eigenmarken, nichts wegwerfen. Mehr als 15 % ist hier kaum drin, weil du öfter zu Hause kochst.'}:{cut:avg*0.05,how:'Einkaufszettel schreiben und Angebote nutzen.'};
+  if(/auto|tanken/i.test(c))return ag?{cut:avg*0.2,how:'Kurze Wege zu Fuß oder mit dem Rad, Fahrten zusammenlegen.'}:{cut:avg*0.05,how:'Günstig tanken (abends), Reifendruck prüfen.'};
+  return ag?{cut:avg*0.5,how:'Auf das Nötigste beschränken, bis der Wunsch erfüllt ist.'}:{cut:avg*0.15,how:'Jede Ausgabe kurz prüfen: brauche ich das wirklich?'}}
+function wishCalc(mode){const a=last3(),keep=S.wishKeep||[];const ex=a.l.filter(t=>t.type==='expense'&&!propOf(t.propertyId)),g={};
+  ex.forEach(t=>{const c=t.category||'Ohne Kategorie';(g[c]=g[c]||[]).push(t)});
+  const rows=[];Object.entries(g).forEach(([c,l])=>{const avg=-l.reduce((s,t)=>s+t.amount,0)/3;if(avg<5)return;const fix=SAVE_FIX.test(c),kept=keep.includes(c);
+    const r=fix?null:saveRule(c,mode,l);rows.push({c,avg,fix,kept,cut:r&&!kept?Math.round(r.cut):0,how:r?r.how:'',unknown:/kreditkarte/i.test(c)})});
+  rows.sort((p,q)=>q.cut-p.cut||q.avg-p.avg);
+  const base=a.inc-a.out,extra=rows.reduce((s,r)=>s+r.cut,0);return {a,rows,base,extra,has:!!(a.inc||a.out)}}
+function wishEta(rate){let left=0;const cm=monthOf(todayISO());return (S.wishes||[]).filter(w=>!w.done).map(w=>{left+=Math.max(0,(+w.price||0)-(+w.saved||0));
+  if(rate<=0)return {w,m:null};const m=Math.ceil(left/rate);return {w,m,ym:addMonth(cm,m)}})}
+const etaText=e=>e.m==null?'so nicht erreichbar':e.m<=0?'schon möglich':monthLabel(e.ym)+' (in '+e.m+(e.m===1?' Monat':' Monaten')+')';
+function wishCard(){const W=(S.wishes||[]).filter(w=>!w.done),mode=(S.settings&&S.settings.saveMode)||'n';const x=wishCalc(mode),E=wishEta(x.base+x.extra);
+  return '<section class="card wish"><div class="h2row"><h3>Wunschliste</h3><button class="small" data-act="wishAdd">+ Wunsch</button></div>'
+    +(W.length?'<div class="elist">'+E.map(e=>'<button class="erow btnrow" data-act="wishPlan"><span><b>'+esc(e.w.title)+'</b><small>'+(x.has?esc(etaText(e)):'Noch zu wenig Daten')+'</small></span><span class="num">'+eur(+e.w.price||0)+'</span></button>').join('')+'</div>'
+      +'<button class="primary" data-act="wishPlan">Sparplan ansehen · '+(mode==='a'?'aggressiv':'normal')+'</button>'
+      :'<p class="hint">Was möchtest du dir kaufen? Trag es ein, dann rechnet die App aus, wann du es dir leisten kannst und wo du dafür sparen kannst.</p>')+'</section>'}
+function wishPlanDlg(){S.settings=S.settings||{};const mode=S.settings.saveMode||'n';const x=wishCalc(mode),o=wishCalc(mode==='a'?'n':'a');
+  const W=(S.wishes||[]).filter(w=>!w.done),E0=wishEta(x.base),E=wishEta(x.base+x.extra);const openN=S.txs.filter(t=>t.type==='open').length;
+  const wl=W.length?'<div class="elist">'+E.map((e,i)=>{const d=E0[i].m!=null&&e.m!=null?E0[i].m-e.m:null;return '<div class="erow"><span><b>'+esc(e.w.title)+' · '+eur(+e.w.price||0)+'</b><small>'+(+e.w.saved?'Schon gespart: '+eur(+e.w.saved)+' · ':'')+'Ohne Sparen: '+esc(etaText(E0[i]))+'</small><small class="'+(e.m==null?'neg':'pos')+'">Mit Sparplan: '+esc(etaText(e))+(d>0?' · '+d+(d===1?' Monat':' Monate')+' früher':'')+'</small></span><span class="form" style="margin:0"><button class="small" data-act="wishDone" data-id="'+e.w.id+'" aria-label="Als gekauft markieren">✓</button><button class="small" data-act="wishEdit" data-id="'+e.w.id+'" aria-label="Wunsch bearbeiten">✎</button></span></div>'}).join('')+'</div>':'<p class="hint">Noch kein Wunsch eingetragen. Der Sparplan zeigt trotzdem, was möglich ist.</p>';
+  const cutRows=x.rows.filter(r=>!r.fix&&!r.unknown);
+  modal('<div class="mhead"><div><h3>Sparplan</h3><small>Private Ausgaben der letzten 3 Monate</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
+    +'<div class="seg" role="tablist"><button data-act="wishMode" data-v="n"'+(mode==='n'?' class="on" aria-selected="true"':'')+'>Normal</button><button data-act="wishMode" data-v="a"'+(mode==='a'?' class="on" aria-selected="true"':'')+'>Aggressiv</button></div>'
+    +(x.has?'<section class="tiles3"><div><span>Bleibt jetzt</span><b class="num '+(x.base<0?'neg':'')+'">'+eur(Math.round(x.base))+'</b></div><div><span>Sparplan</span><b class="num pos">+'+eur(x.extra)+'</b></div><div><span>Pro Monat</span><b class="num">'+eur(Math.round(x.base+x.extra))+'</b></div></section>'
+      +'<p class="hint">'+(mode==='a'?'Aggressiv: alles Verzichtbare fällt weg, bis der Wunsch erfüllt ist. Normal brächte '+eur(o.extra)+' im Monat.':'Normal: überall etwas weniger, ohne großen Verzicht. Aggressiv brächte '+eur(o.extra)+' im Monat.')+'</p>':'<p class="hint">Noch zu wenig Daten. Sobald Umsätze aus drei Monaten da sind, rechnet die App den Plan aus.</p>')
+    +(openN?'<p class="hint neg">'+openN+' Umsätze sind noch nicht zugeordnet. Der Plan wird genauer, wenn du sie einsortierst.</p>':'')
+    +wl+'<div class="form"><button data-act="wishAdd">+ Wunsch</button></div>'
+    +(cutRows.length?'<h3 class="gt lh">Hier sparst du</h3><div class="tips">'+cutRows.map(r=>'<div class="tip'+(r.kept?' off':'')+'"><div class="h2row"><b>'+esc(r.c)+'</b><span class="num">'+(r.kept?'bleibt':'−'+eur(r.cut)+' im Monat')+'</span></div><span>'+(r.kept?'Du hast gewählt, hier nicht zu sparen.':'Jetzt etwa '+eur(Math.round(r.avg))+' im Monat, Ziel '+eur(Math.max(0,Math.round(r.avg)-r.cut))+'. '+esc(r.how))+'</span><button class="small" data-act="wishKeep" data-c="'+esc(r.c)+'">'+(r.kept?'Doch sparen':'Nicht anfassen')+'</button></div>').join('')+'</div>':'')
+    +(x.rows.some(r=>r.unknown)?'<p class="hint">Kreditkarte: Die Abrechnung zeigt nicht, wofür das Geld ausgegeben wurde. Schau hinein, dort stecken oft Abos und Spontankäufe.</p>':'')
+    +(x.rows.some(r=>r.fix)?'<p class="hint">Nicht angetastet: '+esc(x.rows.filter(r=>r.fix).map(r=>r.c).join(', '))+'.</p>':'')
+    +'<div class="form"><button data-act="tipsSave">Einzelne Posten ansehen</button></div>'
+    +'<p class="hint">Der Plan ist eine Rechnung aus deinen Buchungen, keine Finanzberatung. Was verzichtbar ist, entscheidest du.</p>')}
+function wishDlg(id){const w=id?(S.wishes||[]).find(x=>x.id===id):{title:'',price:'',saved:''};const n=v=>v===''||v==null||v===0?'':String(v).replace('.',',');
+  modal('<h3>'+(id?'Wunsch bearbeiten':'Neuer Wunsch')+'</h3><label>Was möchtest du kaufen?<input id="f-wt" value="'+esc(w.title)+'" placeholder="z. B. Neues Auto"></label><div class="grid2"><label>Preis (€)<input id="f-wp" inputmode="decimal" value="'+n(w.price)+'" placeholder="z. B. 15000"></label><label>Schon gespart (€)<input id="f-ws" inputmode="decimal" value="'+n(w.saved)+'" placeholder="optional"></label></div>'
+    +'<div class="mact">'+(id?'<button class="danger" data-act="wishDel" data-id="'+id+'">Löschen</button>':'')+'<button data-act="wishPlan">Abbrechen</button><button class="primary" data-act="wishSave" data-id="'+(id||'')+'">Speichern</button></div>')}
 /* ---------- Icons Modernisierung ---------- */
 const PICON=[
  [/glasfaser|internet|wlan/,'<path d="M5 12a10 10 0 0 1 14 0M8 15a6 6 0 0 1 8 0"/><circle cx="12" cy="18" r="1.3"/><path d="M2 9a14 14 0 0 1 20 0"/>'],
@@ -459,7 +503,7 @@ function vStart(){
   const openN=S.txs.filter(t=>t.type==='open').length;
   return uploadBtn()+receiptBtn()+(openN?'<a class="notice" href="#geld" data-act="goOpen">'+openN+' Umsätze warten auf Zuordnung <span>›</span></a>':'')
   +'<section class="hero"><div class="hl">Gesamtvermögen</div><div class="hv num">'+eur(Math.round(total))+'</div>'+(diff!=null?'<div class="hsub '+(diff>=0?'pos':'neg')+'">'+(diff>=0?'+':'−')+eur(Math.abs(Math.round(diff)))+' seit Jahresbeginn</div>':'')+chart(ser.concat(ser.length?[{date:todayISO(),value:total}]:[]))
-  +'</section>'+ampelCard()+remindCard()
+  +'</section>'+ampelCard()+wishCard()+remindCard()
   +'<div class="seg"><button data-act="per" data-v="m"'+(yr?'':' class="on"')+'>Monat</button><button data-act="per" data-v="y"'+(yr?' class="on"':'')+'>Jahr</button></div>'
   +(yr?'<div class="mbar"><button class="ic" data-act="yearPrev" aria-label="Vorjahr">‹</button><strong>'+ui.year+'</strong><button class="ic" data-act="yearNext" aria-label="Nächstes Jahr">›</button></div>':monthBar())
   +'<section class="tiles3"><button class="tilebtn" data-act="perList" data-k="inc" data-p="'+(yr?'y:'+ui.year:'m:'+ui.month)+'"><span>Einnahmen ›</span><b class="num pos">'+eur(Math.round(m.inc))+'</b></button><button class="tilebtn" data-act="perList" data-k="out" data-p="'+(yr?'y:'+ui.year:'m:'+ui.month)+'"><span>Ausgaben ›</span><b class="num neg">'+eur(Math.round(m.out))+'</b></button><div><span>Übrig</span><b class="num">'+eur(Math.round(rest))+'</b></div></section>'
@@ -664,7 +708,7 @@ function vMehr(){const s=mehrSub();
   const rc=remindItems().length,b=bk();
   const row=(k,ic,c,t,x)=>'<a class="mrow" href="#mehr/'+k+'">'+mic(ic,c)+'<span>'+t+'</span>'+(x?'<em>'+x+'</em>':'')+'<span class="chev">›</span></a>';
   return '<h2>Mehr</h2>'+mehrStatus()+'<nav class="mlist">'
-    +row('bank','bank','c1','Bankverbindungen',b.conns.length||'')+row('remind','bell','c2','Erinnerungen',rc||'')+row('rules','wand','c3','Regeln & Kategorien',S.rules.length||'')
+    +row('remind','bell','c2','Erinnerungen',rc||'')+row('rules','wand','c3','Regeln & Kategorien',S.rules.length||'')
     +row('report','file','c4','Jahresbericht','')+row('acct','lock','c5','Konto, Sicherheit & Backup','')+'</nav>'}
 const MEHR_P={
  bank:()=>bkSection().replace('<h3>Bankverbindung</h3>','')+bkSchedInfo(),
@@ -902,6 +946,14 @@ document.addEventListener('click',e=>{
   case 'catList':{const pk=b.dataset.p,c=b.dataset.c;if(!pk)return;LIST_PK=pk;listDlg(c,(pk.startsWith('mp:')?'Privat · ':'')+periodLabel(pk),periodTx(pk).filter(t=>t.type==='expense'&&(t.category||'Ohne Kategorie')===c),false);return}
   case 'perList':{const pk=b.dataset.p,inc=b.dataset.k==='inc';LIST_PK=pk;listDlg(inc?'Einnahmen':'Ausgaben',periodLabel(pk),periodTx(pk).filter(t=>inc?isInc(t):t.type==='expense'),true);return}
   case 'tipsSave':saveTips();return;
+  case 'wishPlan':wishPlanDlg();return;
+  case 'wishAdd':wishDlg();return;case 'wishEdit':wishDlg(id);return;
+  case 'wishMode':S.settings=S.settings||{};S.settings.saveMode=b.dataset.v;save();render();wishPlanDlg();return;
+  case 'wishKeep':{S.wishKeep=S.wishKeep||[];const c=b.dataset.c,i=S.wishKeep.indexOf(c);if(i>=0)S.wishKeep.splice(i,1);else S.wishKeep.push(c);save();render();wishPlanDlg();return}
+  case 'wishSave':{const t=$('#f-wt').value.trim(),p=parseDE($('#f-wp').value),sv=$('#f-ws').value.trim()===''?0:parseDE($('#f-ws').value);if(!t){toast('Bitte eingeben, was du kaufen möchtest.');return}if(isNaN(p)||p<=0||isNaN(sv)||sv<0){toast('Bitte einen gültigen Betrag eingeben.');return}
+    S.wishes=S.wishes||[];if(id)Object.assign(S.wishes.find(x=>x.id===id),{title:t,price:p,saved:sv});else S.wishes.push({id:uid(),title:t,price:p,saved:sv});save();render();wishPlanDlg();return}
+  case 'wishDel':S.wishes=(S.wishes||[]).filter(x=>x.id!==id);save();render();wishPlanDlg();return;
+  case 'wishDone':{const w=(S.wishes||[]).find(x=>x.id===id);if(w){w.done=true;save();render();wishPlanDlg();toast('Glückwunsch! Wunsch erfüllt.')}return}
   case 'tipsCash':cashTips();return;
   case 'toggleRepaid':ui.showRepaid=!ui.showRepaid;saveUi();render();return;
   case 'loanList':{const o=loans().find(x=>nrm(x.p)===b.dataset.k);if(o)listDlg('Darlehen '+o.p,'Offen '+eur(Math.round(o.open*100)/100),o.l,false);return}
@@ -1384,7 +1436,7 @@ async function api(path,opt){let r;try{r=await fetch(SRV+path,Object.assign({},o
   let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw {code:j.error||('HTTP_'+r.status),status:r.status,version:j.version};return j}
 function authErr(e){const c=e&&e.code;return ({NETWORK:'Keine Verbindung zum Server. Prüfe das Internet.',WRONG_LOGIN:'E-Mail oder Passwort stimmt nicht.',WRONG_CODE:'E-Mail oder Wiederherstellungscode stimmt nicht.',TOO_MANY:'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.',NOT_INVITED:'Für diese E-Mail-Adresse ist die Registrierung nicht freigeschaltet.',EXISTS:'Für diese E-Mail gibt es schon ein Konto. Bitte anmelden.',NO_DATABASE:'Beim Server fehlt die Datenbank (Bindung DB).',FORBIDDEN_ORIGIN:'Der Server erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).'})[c]||('Fehler'+(c?' ('+c+')':'')+'.')}
 /* --- Zustand für den Tresor --- */
-const ARR_KEYS=['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders'];
+const ARR_KEYS=['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes'];
 function exportS(){const o=JSON.parse(JSON.stringify(S));if(o.settings)delete o.settings.lock;delete o._t;return o}
 const hasData=s=>!!s&&ARR_KEYS.some(k=>Array.isArray(s[k])&&s[k].length);
 function mergeInto(local,server){/* Neues vom anderen Gerät übernehmen, eigene Änderungen behalten */
@@ -1519,3 +1571,11 @@ I18N.push(['Bankverbindungen','Bank connections','Bankovne veze'],['Regeln & Kat
  ['Steht das Stichwort im Umsatz, wird er beim Abruf oder Hochladen automatisch einsortiert.','If the keyword appears in a transaction, it is sorted automatically when fetched or uploaded.','Ako se ključna riječ pojavi u transakciji, automatski se razvrstava pri dohvaćanju ili učitavanju.']);
 PREFIX.push(['Bank · ','Bank · ','Banka · '],['Zuletzt heute ','Last today ','Zadnje danas '],['Zuletzt ','Last ','Zadnje '],['Nächster Abruf ','Next fetch ','Sljedeće dohvaćanje '],
  ['Die Umsätze werden täglich um ','Transactions are fetched daily at ','Transakcije se dohvaćaju svaki dan u '],[' Zahlungen · ',' payments · ',' plaćanja · ']);
+I18N.push(['Wunschliste','Wish list','Lista želja'],['+ Wunsch','+ Wish','+ Želja'],['Sparplan','Savings plan','Plan štednje'],['Normal','Normal','Normalno'],['Aggressiv','Aggressive','Agresivno'],
+ ['Neuer Wunsch','New wish','Nova želja'],['Wunsch bearbeiten','Edit wish','Uredi želju'],['Was möchtest du kaufen?','What do you want to buy?','Što želiš kupiti?'],['Preis (€)','Price (€)','Cijena (€)'],['Schon gespart (€)','Already saved (€)','Već ušteđeno (€)'],
+ ['Hier sparst du','Where you save','Ovdje štediš'],['Nicht anfassen','Leave as is','Ne diraj'],['Doch sparen','Save here after all','Ipak štedi'],['Bleibt jetzt','Left now','Sada ostaje'],['Pro Monat','Per month','Mjesečno'],
+ ['Einzelne Posten ansehen','View individual items','Pogledaj pojedine stavke'],['Noch zu wenig Daten','Not enough data yet','Još premalo podataka'],
+ ['Was möchtest du dir kaufen? Trag es ein, dann rechnet die App aus, wann du es dir leisten kannst und wo du dafür sparen kannst.','What would you like to buy? Enter it and the app works out when you can afford it and where you can save for it.','Što si želiš kupiti? Upiši, a aplikacija izračuna kada si to možeš priuštiti i gdje za to možeš štedjeti.'],
+ ['Der Plan ist eine Rechnung aus deinen Buchungen, keine Finanzberatung. Was verzichtbar ist, entscheidest du.','The plan is a calculation from your transactions, not financial advice. You decide what is dispensable.','Plan je izračun iz tvojih knjiženja, a ne financijski savjet. Što je suvišno, odlučuješ ti.'],
+ ['Glückwunsch! Wunsch erfüllt.','Congratulations! Wish fulfilled.','Čestitamo! Želja ispunjena.']);
+PREFIX.push(['Sparplan ansehen · ','View savings plan · ','Pogledaj plan štednje · '],['Ohne Sparen: ','Without saving: ','Bez štednje: '],['Mit Sparplan: ','With savings plan: ','S planom štednje: '],['Schon gespart: ','Already saved: ','Već ušteđeno: ']);

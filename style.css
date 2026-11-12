@@ -239,3 +239,5 @@ details.bkset summary{cursor:pointer;color:var(--accent2);font-weight:600;margin
 /* Zahlungen nach Name */
 .lnk{all:unset;cursor:pointer;color:var(--ink);text-decoration:underline;text-decoration-color:rgba(255,91,46,.6);text-underline-offset:3px;font-weight:600;overflow-wrap:anywhere}
 .lnk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tip.off{border-left-color:var(--line);opacity:.75}.tip button{align-self:flex-start;margin-top:4px}
+.wish .elist{margin:0 -4px}
