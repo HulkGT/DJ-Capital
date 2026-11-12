@@ -252,3 +252,13 @@ details.bkset summary{cursor:pointer;color:var(--accent2);font-weight:600;margin
 @media(min-width:560px){.itabs{grid-template-columns:repeat(5,minmax(0,1fr))}}
 .itabs button[data-v=plan]{grid-column:1/-1}
 @media(min-width:560px){.itabs button[data-v=plan]{grid-column:auto}}
+.rend{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.rgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.rgrid div{display:flex;flex-direction:column;gap:2px;background:var(--raised);border-radius:10px;padding:7px 8px;min-width:0}
+.rgrid span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rgrid b{font-size:1rem;font-variant-numeric:tabular-nums;white-space:nowrap}.rgrid b small{font-size:.7rem;color:var(--muted)}
+.rgrid .pos{color:var(--good)}.rgrid .neg{color:var(--bad)}.rgrid .warn{color:var(--warn)}
+.pill{font-size:.75rem;font-weight:700;padding:3px 10px;border-radius:99px}
+.pill.pos{background:var(--good-bg);color:var(--good)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.neg{background:var(--bad-bg);color:var(--bad)}
+.rhelp summary{cursor:pointer;color:var(--muted);font-size:.85rem}
+.grid3{display:grid;grid-template-columns:1fr 1.3fr 1.3fr;gap:8px}
