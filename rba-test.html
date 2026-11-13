@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>RBA-Test</title>
+<style>
+body{margin:0;background:#0b0d12;color:#f2f4f8;font:16px/1.45 system-ui,sans-serif;padding:18px}
+h1{font-size:1.3rem;margin:0 0 6px}p{color:#9099ad;margin:6px 0 14px}
+.t{background:#151922;border:1px solid #2a3142;border-radius:14px;padding:14px;margin:12px 0}
+.t b{display:block;margin-bottom:4px}.t small{color:#9099ad;display:block;margin-bottom:10px}
+a,button{display:inline-block;font:inherit;font-weight:600;background:#ff5b2e;color:#140803;border:0;border-radius:12px;padding:11px 16px;text-decoration:none}
+input{color:#9099ad;margin:6px 0 10px}
+#log{color:#3ddc97;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>Test: mojaRBA öffnen</h1>
+<p>Tippe die Knöpfe der Reihe nach an. Merke dir, was jeweils passiert: App geht auf, Play Store geht auf oder nichts passiert. Danach mit Zurück hierher.</p>
+
+<div class="t"><b>A · App direkt</b><small>Ohne Umweg über den Play Store</small><a id="a" href="#">Test A</a></div>
+<div class="t"><b>B · Über den Play Store starten</b><small>Öffnet die App, wenn sie installiert ist</small><a id="b" href="#">Test B</a></div>
+<div class="t"><b>C · App-Start mit Startbildschirm</b><small>Wie bisher, nur ohne Ersatzweg</small><a id="c" href="#">Test C</a></div>
+
+<div class="t"><b>D · Barcode an mojaRBA teilen</b><small>Wähle das Barcode-Bild aus dem Album Download (von der Rechnung), dann „Teilen". Schau, ob mojaRBA in der Liste steht und was nach dem Login passiert.</small>
+<input type="file" id="img" accept="image/*"><br><button id="share">Teilen</button></div>
+<div id="log"></div>
+
+<script>
+const P='co.infinum.rba.eva';
+document.getElementById('a').href='intent://#Intent;package='+P+';end';
+document.getElementById('b').href='market://launch?id='+P;
+document.getElementById('c').href='intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package='+P+';end';
+const log=t=>document.getElementById('log').textContent=t;
+document.getElementById('share').onclick=async()=>{
+  const f=document.getElementById('img').files[0];
+  if(!f){log('Bitte zuerst ein Bild wählen.');return}
+  const data={files:[f]};
+  if(!navigator.canShare||!navigator.canShare(data)){log('Dieses Handy kann Bilder aus Chrome nicht teilen.');return}
+  try{await navigator.share(data);log('Geteilt.')}catch(e){log('Abgebrochen oder nicht möglich: '+e.name)}
+};
+</script>
+</body>
+</html>
