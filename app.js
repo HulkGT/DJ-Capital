@@ -215,7 +215,9 @@ const ICON={
  immo:'<svg viewBox="0 0 24 24"><path d="M4 21V5l8-3v19M12 21h8V9l-8-3"/><path d="M7 8h2M7 12h2M7 16h2M15 12h2M15 16h2"/></svg>',
  konten:'<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h4"/></svg>',
  more:'<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
- up:'<svg viewBox="0 0 24 24"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>'};
+ up:'<svg viewBox="0 0 24 24"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>',
+ pay:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3zM3 10h18M7 15h4"/></svg>',
+ bill:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4"/></svg>'};
 /* ---------- Berechnungen ---------- */
 const accValue=a=>{const h=(a.history||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));return h.length?h[h.length-1]:null};
 const accValueAt=(a,d)=>{let v=0;(a.history||[]).forEach(h=>{if(h.date<=d)v=h.value});const f=(a.history||[]).filter(h=>h.date<=d).sort((x,y)=>x.date.localeCompare(y.date));return f.length?f[f.length-1].value:0};
@@ -244,14 +246,13 @@ function remindItems(){
   const cy=+T.slice(0,4);
   (S.plans||[]).filter(p=>p.status!=='Erledigt'&&p.year&&p.year<=cy).forEach(p=>out.push({date:p.year+'-12-31',t:p.title,s:(p.year<cy?'Überfällig, geplant für ':'Geplant für ')+p.year+((propOf(p.propertyId)||{}).name?' · '+propOf(p.propertyId).name:''),lvl:p.year<cy?'late':'pending',act:'plan:'+p.id}));
   (S.reminders||[]).forEach(r=>{const d=daysTo(r.date);if(d<=(r.lead||30))out.push({date:r.date,t:r.title,s:(d<0?'Fällig seit '+dfmt(r.date):d===0?'Heute fällig':'Fällig am '+dfmt(r.date))+(r.repeat&&r.repeat!=='none'?' · wiederholt sich '+(r.repeat==='yearly'?'jährlich':'monatlich'):''),lvl:d<0?'late':d<=7?'partial':'pending',rid:r.id})});
+  (S.bills||[]).filter(b=>b.status==='open'&&b.due).forEach(b=>{const d=daysTo(b.due);if(d<=14)out.push({date:b.due,t:'Rechnung '+(b.payee||''),s:(d<0?'Fällig seit '+dfmt(b.due):d===0?'Heute fällig':'Fällig am '+dfmt(b.due))+(b.amount!=null?' · '+eur(b.amount):''),lvl:d<0?'late':d<=3?'partial':'pending',act:'bill:'+b.id,app:1})});
   return out.sort((a,b)=>a.date.localeCompare(b.date));
 }
 const LVL={late:'Dringend',partial:'Bald',pending:'Geplant'};
 const remRow=x=>'<div class="rem '+x.lvl+'"><span class="it"><strong>'+esc(x.t)+'</strong><small>'+esc(x.s)+'</small></span>'+(x.rid?'<button class="small" data-act="remDone" data-id="'+x.rid+'">Erledigt</button>':x.act?'<button class="small" data-act="remGo" data-v="'+esc(x.act)+'">Öffnen</button>':'')+'</div>';
 function remindCard(){if(S.settings&&S.settings.remind===false)return '';const L=remindItems();if(!L.length)return '';
   return '<section class="card accent ay"><div class="h2row"><h3><span class="hic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/></svg></span>Demnächst</h3>'+(L.length>3?'<button class="small" data-act="remAll">Alle ('+L.length+')</button>':'')+'</div><div class="rems">'+L.slice(0,3).map(remRow).join('')+'</div></section>'}
-function remDlg(){const r={title:'',date:todayISO(),repeat:'yearly',lead:30};
-  modal('<h3>Neue Erinnerung</h3><label>Woran?<input id="f-rt" placeholder="z. B. Gebäudeversicherung zahlen"></label><div class="grid2"><label>Fällig am<input id="f-rdt" type="date" value="'+r.date+'"></label><label>Wiederholen<select id="f-rrep"><option value="none">Einmalig</option><option value="monthly">Monatlich</option><option value="yearly" selected>Jährlich</option></select></label><label>Vorher anzeigen (Tage)<input id="f-rlead" type="number" min="0" max="365" value="30"></label></div><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveRem">Speichern</button></div>')}
 /* ---------- Monatsvergleich ---------- */
 function unusual(ym){
   const cur=byCat(monthTx(ym).filter(t=>t.type==='expense')),prev={};
@@ -444,22 +445,6 @@ function wishCard(){const W=(S.wishes||[]).filter(w=>!w.done),mode=(S.settings&&
     +(W.length?'<div class="elist">'+E.map(e=>'<button class="erow btnrow" data-act="wishPlan"><span><b>'+esc(e.w.title)+'</b><small>'+(x.has?esc(etaText(e)):'Noch zu wenig Daten')+'</small><span class="wbar"><i style="width:'+Math.min(100,Math.round((+e.w.saved||0)/(+e.w.price||1)*100))+'%"></i></span></span><span class="num">'+eur(+e.w.price||0)+'</span></button>').join('')+'</div>'
       +'<button class="primary" data-act="wishPlan">Sparplan ansehen · '+(mode==='a'?'aggressiv':'normal')+'</button>'
       :'<p class="hint">Was möchtest du dir kaufen? Trag es ein, dann rechnet die App aus, wann du es dir leisten kannst und wo du dafür sparen kannst.</p>')+'</section>'}
-function wishPlanDlg(){S.settings=S.settings||{};const mode=S.settings.saveMode||'n';const x=wishCalc(mode),o=wishCalc(mode==='a'?'n':'a');
-  const W=(S.wishes||[]).filter(w=>!w.done),E0=wishEta(x.base),E=wishEta(x.base+x.extra);const openN=S.txs.filter(t=>t.type==='open').length;
-  const wl=W.length?'<div class="elist">'+E.map((e,i)=>{const d=E0[i].m!=null&&e.m!=null?E0[i].m-e.m:null;return '<div class="erow"><span><b>'+esc(e.w.title)+' · '+eur(+e.w.price||0)+'</b><small>'+(+e.w.saved?'Schon gespart: '+eur(+e.w.saved)+' · ':'')+'Ohne Sparen: '+esc(etaText(E0[i]))+'</small><small class="'+(e.m==null?'neg':'pos')+'">Mit Sparplan: '+esc(etaText(e))+(d>0?' · '+d+(d===1?' Monat':' Monate')+' früher':'')+'</small></span><span class="form" style="margin:0"><button class="small" data-act="wishDone" data-id="'+e.w.id+'" aria-label="Als gekauft markieren">✓</button><button class="small" data-act="wishEdit" data-id="'+e.w.id+'" aria-label="Wunsch bearbeiten">✎</button></span></div>'}).join('')+'</div>':'<p class="hint">Noch kein Wunsch eingetragen. Der Sparplan zeigt trotzdem, was möglich ist.</p>';
-  const cutRows=x.rows.filter(r=>!r.fix&&!r.unknown);
-  modal('<div class="mhead"><div><h3>Sparplan</h3><small>Private Ausgaben der letzten 3 Monate</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
-    +'<div class="seg" role="tablist"><button data-act="wishMode" data-v="n"'+(mode==='n'?' class="on" aria-selected="true"':'')+'>Normal</button><button data-act="wishMode" data-v="a"'+(mode==='a'?' class="on" aria-selected="true"':'')+'>Aggressiv</button></div>'
-    +(x.has?'<section class="tiles3"><button class="tilebtn" data-act="wishRate"><span>Bleibt jetzt ›</span><b class="num '+(x.base<0?'neg':'')+'">'+eur(Math.round(x.base))+'</b></button><div><span>Sparplan</span><b class="num pos">+'+eur(x.extra)+'</b></div><div><span>Pro Monat</span><b class="num">'+eur(Math.round(x.base+x.extra))+'</b></div></section>'
-      +'<p class="hint">'+(mode==='a'?'Aggressiv: alles Verzichtbare fällt weg, bis der Wunsch erfüllt ist. Normal brächte '+eur(o.extra)+' im Monat.':'Normal: überall etwas weniger, ohne großen Verzicht. Aggressiv brächte '+eur(o.extra)+' im Monat.')+'</p>':'<p class="hint">Noch zu wenig Daten. Sobald Umsätze aus drei Monaten da sind, rechnet die App den Plan aus.</p>')
-    +(x.has?'<p class="hint">'+(x.wb.manual?'„Bleibt jetzt“ hast du selbst festgelegt.':'„Bleibt jetzt“: regelmäßige Einnahmen '+eur(Math.round(x.wb.inc))+' minus übliche Ausgaben '+eur(Math.round(x.wb.out))+'. Einmalige Einnahmen zählen nicht mit.')+' Antippen zum Prüfen oder Ändern.</p>':'')
-    +(openN?'<p class="hint neg">'+openN+' Umsätze sind noch nicht zugeordnet. Der Plan wird genauer, wenn du sie einsortierst.</p>':'')
-    +wl+'<div class="form"><button data-act="wishAdd">+ Wunsch</button></div>'
-    +(cutRows.length?'<h3 class="gt lh">Hier sparst du</h3><div class="tips">'+cutRows.map(r=>'<div class="tip'+(r.kept?' off':'')+'"><div class="h2row"><b>'+esc(r.c)+'</b><span class="num">'+(r.kept?'bleibt':'−'+eur(r.cut)+' im Monat')+'</span></div><span>'+(r.kept?'Du hast gewählt, hier nicht zu sparen.':'Jetzt etwa '+eur(Math.round(r.avg))+' im Monat, Ziel '+eur(Math.max(0,Math.round(r.avg)-r.cut))+'. '+esc(r.how))+'</span><button class="small" data-act="wishKeep" data-c="'+esc(r.c)+'">'+(r.kept?'Doch sparen':'Nicht anfassen')+'</button></div>').join('')+'</div>':'')
-    +(x.rows.some(r=>r.unknown)?'<p class="hint">Kreditkarte: Die Abrechnung zeigt nicht, wofür das Geld ausgegeben wurde. Schau hinein, dort stecken oft Abos und Spontankäufe.</p>':'')
-    +(x.rows.some(r=>r.fix)?'<p class="hint">Nicht angetastet: '+esc(x.rows.filter(r=>r.fix).map(r=>r.c).join(', '))+'.</p>':'')
-    +'<div class="form"><button data-act="tipsSave">Einzelne Posten ansehen</button></div>'
-    +'<p class="hint">Der Plan ist eine Rechnung aus deinen Buchungen, keine Finanzberatung. Was verzichtbar ist, entscheidest du.</p>')}
 function wishDlg(id){const w=id?(S.wishes||[]).find(x=>x.id===id):{title:'',price:'',saved:''};const n=v=>v===''||v==null||v===0?'':String(v).replace('.',',');
   modal('<h3>'+(id?'Wunsch bearbeiten':'Neuer Wunsch')+'</h3><label>Was möchtest du kaufen?<input id="f-wt" value="'+esc(w.title)+'" placeholder="z. B. Neues Auto"></label><div class="grid2"><label>Preis (€)<input id="f-wp" inputmode="decimal" value="'+n(w.price)+'" placeholder="z. B. 15000"></label><label>Schon gespart (€)<input id="f-ws" inputmode="decimal" value="'+n(w.saved)+'" placeholder="optional"></label></div>'
     +'<div class="mact">'+(id?'<button class="danger" data-act="wishDel" data-id="'+id+'">Löschen</button>':'')+'<button data-act="wishPlan">Abbrechen</button><button class="primary" data-act="wishSave" data-id="'+(id||'')+'">Speichern</button></div>')}
@@ -565,9 +550,9 @@ function vStart(){
   const yr=ui.per==='y';let m;if(yr){const y=String(ui.year),l=S.txs.filter(t=>(t.type==='rent'?(t.forMonth||t.date):t.date).startsWith(y));m={l,inc:l.filter(isInc).reduce((s,t)=>s+t.amount,0),out:-l.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0)}}else m=monthSums(ui.month);const rest=m.inc-m.out;
   const cats=byCat(m.l.filter(t=>t.type==='expense')).slice(0,4),cmax=cats.length?cats[0][1]:1;
   const openN=S.txs.filter(t=>t.type==='open').length;
-  return uploadBtn()+receiptBtn()+(openN?'<a class="notice" href="#geld" data-act="goOpen">'+openN+' Umsätze warten auf Zuordnung <span>›</span></a>':'')
-  +'<section class="hero"><div class="hl">Gesamtvermögen</div><div class="hv num">'+eur(Math.round(total))+'</div>'+(diff!=null?'<div class="hsub '+(diff>=0?'pos':'neg')+'">'+(diff>=0?'+':'−')+eur(Math.abs(Math.round(diff)))+' seit Jahresbeginn</div>':'')+creditHero(total)+chart(ser.concat(ser.length?[{date:todayISO(),value:total}]:[]))
-  +'</section>'+ampelCard()+wishCard()+remindCard()
+  return (openN?'<a class="notice" href="#geld" data-act="goOpen">'+openN+' Umsätze warten auf Zuordnung <span>›</span></a>':'')
+  +'<section class="hero"><div class="hl">Gesamtvermögen</div><div class="hv num">'+eur(Math.round(total))+'</div>'+(diff!=null?'<div class="hsub '+(diff>=0?'pos':'neg')+'">'+(diff>=0?'+':'−')+eur(Math.abs(Math.round(diff)))+' seit Jahresbeginn</div>':'')+creditHero(total)+chart(ser.concat(ser.length?[{date:todayISO(),value:total}]:[]))+'<div class="hbtn"><button class="pillb" data-act="upAuszug">'+ICON.up+'Kontoauszug</button><button class="pillb" data-act="upBeleg">'+ICON.up+'Beleg</button></div>'
+  +'</section>'+billCard()+ampelCard()+wishCard()+remindCard()
   +'<div class="seg"><button data-act="per" data-v="m"'+(yr?'':' class="on"')+'>Monat</button><button data-act="per" data-v="y"'+(yr?' class="on"':'')+'>Jahr</button></div>'
   +(yr?'<div class="mbar"><button class="ic" data-act="yearPrev" aria-label="Vorjahr">‹</button><strong>'+ui.year+'</strong><button class="ic" data-act="yearNext" aria-label="Nächstes Jahr">›</button></div>':monthBar())
   +'<section class="tiles3"><button class="tilebtn" data-act="perList" data-k="inc" data-p="'+(yr?'y:'+ui.year:'m:'+ui.month)+'"><span>Einnahmen ›</span><b class="num pos">'+eur(Math.round(m.inc))+'</b></button><button class="tilebtn" data-act="perList" data-k="out" data-p="'+(yr?'y:'+ui.year:'m:'+ui.month)+'"><span>Ausgaben ›</span><b class="num neg">'+eur(Math.round(m.out))+'</b></button><div><span>Übrig</span><b class="num">'+eur(Math.round(rest))+'</b></div></section>'
@@ -879,9 +864,14 @@ const MI={
  bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/>',
  wand:'<path d="M4 20 16 8M14 4v2M20 10h-2M18.5 5.5 17 7M15 3l1 1M21 9l-1-1"/>',
  file:'<path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6"/>',
- lock:'<path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>'};
+ lock:'<path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>',
+ eye:'<path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="3"/>',
+ immo:'<path d="M4 21V5l8-3v19M12 21h8V9l-8-3M7 8h2M7 12h2M7 16h2M15 12h2M15 16h2"/>',
+ globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+ user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
+ cloud:'<path d="M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1 0 9zM9.5 13.5l2 2 3.5-4"/>'};
 const mic=(k,c)=>'<span class="mic '+c+'"><svg viewBox="0 0 24 24" aria-hidden="true">'+MI[k]+'</svg></span>';
-const MEHR_SUB={bank:'Bankverbindungen',remind:'Erinnerungen',rules:'Regeln & Kategorien',report:'Jahresbericht',acct:'Konto, Sicherheit & Backup'};
+const MEHR_SUB={bank:'Bankverbindungen',bills:'Rechnungen',remind:'Erinnerungen',rules:'Regeln & Kategorien',report:'Jahresbericht',acct:'Konto, Sicherheit & Backup'};
 function mehrSub(){const s=(location.hash.split('/')[1]||'');return MEHR_SUB[s]?s:''}
 const hm=t=>{const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
 function bkNextRun(){const H=(bkSched.hours||[9,14,18]).slice().sort((x,y)=>x-y),n=new Date();for(const h of H){if(n.getHours()<h)return String(h).padStart(2,'0')+':00'}return 'morgen '+String(H[0]).padStart(2,'0')+':00'}
@@ -897,17 +887,17 @@ function vMehr(){const s=mehrSub();
   const rc=remindItems().length,b=bk();
   const row=(k,ic,c,t,x)=>'<a class="mrow" href="#mehr/'+k+'">'+mic(ic,c)+'<span>'+t+'</span>'+(x?'<em>'+x+'</em>':'')+'<span class="chev">›</span></a>';
   return '<h2>Mehr</h2>'+mehrStatus()+'<nav class="mlist">'
-    +row('remind','bell','c2','Erinnerungen',rc||'')+row('rules','wand','c3','Regeln & Kategorien',S.rules.length||'')
+    +row('bills','file','c1','Rechnungen',(S.bills||[]).filter(b=>b.status==='open').length||'')+row('remind','bell','c2','Erinnerungen',rc||'')+row('rules','wand','c3','Regeln & Kategorien',S.rules.length||'')
     +row('report','file','c4','Jahresbericht','')+row('acct','lock','c5','Konto, Sicherheit & Backup','')+'</nav>'}
 const MEHR_P={
+ bills:()=>billPage(),
  bank:()=>bkSection().replace('<h3>Bankverbindung</h3>','')+bkSchedInfo(),
  report:()=>'<section class="group"><p class="hint">Alle Zahlen eines Jahres als Datei, zum Ausdrucken oder für den Steuerberater.</p><button data-act="report">Jahresbericht erstellen</button></section>',
- remind:()=>'<section class="group"><div class="h2row"><span></span><button class="small" data-act="toggleRemind">'+(S.settings&&S.settings.remind===false?'Auf Übersicht zeigen':'Auf Übersicht ausblenden')+'</button></div><p class="hint">Kündigungsfristen, fehlende Mieten und geplante Modernisierungen erkennt die App selbst. Hier legst du eigene Termine an, zum Beispiel Versicherungen oder Komunalna naknada.</p><div class="list">'+(S.reminders||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>'<div class="item static"><span class="it"><strong>'+esc(x.title)+'</strong><small>'+dfmt(x.date)+(x.repeat==='yearly'?' · jährlich':x.repeat==='monthly'?' · monatlich':'')+'</small></span><button class="ic" data-act="delRem" data-id="'+x.id+'" aria-label="Erinnerung löschen">×</button></div>').join('')+'</div><button data-act="addRem">+ Erinnerung</button></section>',
+ remind:()=>remPage(),
  rules:()=>'<section class="group"><h3>Automatische Regeln</h3><p class="hint">Steht das Stichwort im Umsatz, wird er beim Abruf oder Hochladen automatisch einsortiert.</p><div class="list">'+S.rules.map((r,i)=>'<div class="item static"><span class="it"><strong>'+esc(r.keyword)+'</strong><small>'+esc(r.category)+(r.propertyId?' · '+esc((propOf(r.propertyId)||{}).name||''):'')+'</small></span><button class="ic" data-act="delRule" data-i="'+i+'" aria-label="Regel löschen">×</button></div>').join('')+'</div>'
   +'<div class="form"><input id="f-rkw" placeholder="Stichwort, z. B. REWE"><select id="f-rcat"><optgroup label="Ausgabe">'+S.cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup><optgroup label="Einnahme">'+S.icats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup></select>'+(immoOn()?'<select id="f-rprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'">Immobilie: '+esc(p.name)+'</option>').join('')+'</select>':'')+'<button data-act="addRule">Regel hinzufügen</button></div></section>'+learnSection()
   +'<section class="group"><h3>Kategorien für Ausgaben</h3><div class="chips">'+S.cats.map((c,i)=>'<span class="chip">'+esc(c)+'<button data-act="delCat" data-i="'+i+'" aria-label="'+esc(c)+' entfernen">×</button></span>').join('')+'</div><div class="form"><input id="f-cat" placeholder="Neue Kategorie"><button data-act="addCat">Hinzufügen</button></div></section>',
- acct:()=>acctSection()+'<section class="group"><h3>Profil & Sicherheit</h3><label>Dein Name (für den Jahresbericht)<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'" placeholder="Vor- und Nachname"></label><button data-act="saveOwner">Name speichern</button><div class="h2row" style="margin-top:6px"><span>Fingerabdruck-Sperre</span><button class="small'+(S.settings&&S.settings.lock?' primary':'')+'" data-act="toggleLock">'+(S.settings&&S.settings.lock?'An · ausschalten':'Aus · einschalten')+'</button></div><div class="h2row" style="margin-top:6px"><span>Kredite verwenden</span><button class="small'+(creditOn()?' primary':'')+'" data-act="toggleCredit">'+(creditOn()?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Für Bankkredite: Restschuld, Zins und Tilgung, Sondertilgung, Vermögen nach Abzug der Schulden. Zu finden unter Konten.</p><div class="h2row" style="margin-top:6px"><span>Immobilien verwenden</span><button class="small'+(immoOn()?' primary':'')+'" data-act="toggleImmo">'+(immoOn()?'An · ausschalten':'Aus · einschalten')+'</button></div><p class="hint">Für vermietete Wohnungen und Häuser: Mieteingang, Mieter, Zähler, Modernisierung. Wenn du keine hast, schalte den Bereich aus. Es wird nichts gelöscht.</p><p class="hint">Beim Öffnen und nach einer Minute im Hintergrund fragt die App nach Fingerabdruck oder Gesichtserkennung. Die Sperre schützt vor neugierigen Blicken, ersetzt aber nicht die Displaysperre deines Handys.</p><label>Sprache · Language · Jezik<select id="f-lang">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel(((S.settings&&S.settings.lang)||'auto')===v)+'>'+t+'</option>').join('')+'</select></label></section>'
-  +'<section class="group"><h3>Backup</h3><p class="hint">'+(loggedIn()?'Deine Daten werden verschlüsselt mit deinem Konto synchronisiert. Ein zusätzliches Backup schadet trotzdem nicht.':'Die Daten liegen nur auf diesem Gerät. Speichere regelmäßig ein Backup, zum Beispiel in Google Drive.')+'</p><div class="form"><button data-act="copyBackup">Backup speichern</button><button data-act="restoreDlg">Backup einspielen</button></div></section>'
+ acct:()=>acctPage()
 };
 /* ---------- Formulare ---------- */
 function editProp(id){const p=id?propOf(id):{name:'',address:'',country:'Kroatien',value:'',valueNote:''};
@@ -1175,11 +1165,11 @@ document.addEventListener('click',e=>{
   case 'delReading':{const m=S.meterDevs.find(x=>x.id===id);m.readings=m.readings.filter(r=>r.date!==b.dataset.d);save();render();meterDlg(id);return}
   case 'reassignOpen':{let n=0;S.txs.forEach(t=>{if(t.type==='open'&&autoAssign2(t))n++});go();toast(n+' Umsätze zugeordnet.');return}
   case 'remAll':modal('<div class="mhead"><div><h3>Demnächst</h3></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div><div class="rems">'+remindItems().map(remRow).join('')+'</div>');return;
-  case 'remGo':{const v=b.dataset.v;closeModal();if(v==='immo'){ui.immo='miete';saveUi();location.hash='#immo'}else if(v.startsWith('plan:')){ui.immo='plan';saveUi();location.hash='#immo';render();planDlg(v.slice(5))}else if(v.startsWith('cl:'))clDlg(v.slice(3));return}
+  case 'remGo':{const v=b.dataset.v;closeModal();if(v.startsWith('bill:')){location.hash='#mehr/bills';return}if(v==='immo'){ui.immo='miete';saveUi();location.hash='#immo'}else if(v.startsWith('plan:')){ui.immo='plan';saveUi();location.hash='#immo';render();planDlg(v.slice(5))}else if(v.startsWith('cl:'))clDlg(v.slice(3));return}
   case 'remDone':{const r=(S.reminders||[]).find(x=>x.id===id);if(!r)return;if(r.repeat==='yearly')r.date=(+r.date.slice(0,4)+1)+r.date.slice(4);else if(r.repeat==='monthly')r.date=addMonth(r.date.slice(0,7),1)+'-'+r.date.slice(8);else S.reminders=S.reminders.filter(x=>x.id!==id);closeModal();go();toast(r.repeat&&r.repeat!=='none'?'Erledigt. Nächster Termin: '+dfmt(r.date):'Erledigt.');return}
   case 'addRem':remDlg();return;
-  case 'saveRem':{const t=$('#f-rt').value.trim();if(!t){toast('Bitte eingeben, woran erinnert werden soll.');return}S.reminders=S.reminders||[];S.reminders.push({id:uid(),title:t,date:$('#f-rdt').value||todayISO(),repeat:$('#f-rrep').value,lead:parseInt($('#f-rlead').value,10)||30});closeModal();go();return}
-  case 'delRem':S.reminders=(S.reminders||[]).filter(x=>x.id!==id);go();return;
+  case 'saveRem':{const t=$('#f-rt').value.trim();if(!t){toast('Bitte eingeben, woran erinnert werden soll.');return}S.reminders=S.reminders||[];const v={title:t,date:$('#f-rdt').value||todayISO(),repeat:$('#f-rrep').value,lead:parseInt($('#f-rlead').value,10)||30};const ex=id&&S.reminders.find(x=>x.id===id);if(ex)Object.assign(ex,v);else S.reminders.push(Object.assign({id:uid()},v));closeModal();go();return}
+  case 'delRem':S.reminders=(S.reminders||[]).filter(x=>x.id!==id);closeModal();go();return;
   case 'toggleImmo':S.settings=S.settings||{};S.settings.immo=!immoOn();go();toast(immoOn()?'Immobilien sind eingeschaltet.':'Immobilien sind ausgeblendet. Deine Daten bleiben gespeichert.');return;
   case 'immoAsk':S.settings=S.settings||{};S.settings.immo=b.dataset.v==='1';closeModal();go();setTimeout(creditAsk,500);return;
   case 'dupFind':dupDlg();return;
@@ -1214,7 +1204,7 @@ document.addEventListener('click',e=>{
   case 'delCat':{const c=S.cats[i];ask('Kategorie „'+c+'“ entfernen?','Entfernen',()=>{S.cats.splice(i,1);go()});return}
   case 'addRule':{const k=$('#f-rkw').value.trim();if(!k){toast('Bitte ein Stichwort eingeben.');return}S.rules.push({keyword:k,category:$('#f-rcat').value,propertyId:$('#f-rprop').value});let n=0;S.txs.forEach(t=>{if(t.type==='open'&&autoAssign2(t))n++});go();if(n)toast(n+' offene Umsätze zugeordnet.');return}
   case 'delRule':S.rules.splice(i,1);go();return;
-  case 'copyBackup':{(async()=>{let rc={};try{rc=await idbAll(RC)}catch(e){}dlBlob(new Blob([JSON.stringify({app:'DJ Capital',date:todayISO(),state:S,receipts:rc})],{type:'application/json'}),'DJ-Capital-Backup-'+todayISO()+'.json');toast('Backup gespeichert. Hebe die Datei gut auf.')})();return}
+  case 'copyBackup':{(async()=>{let rc={};try{rc=await idbAll(RC)}catch(e){}dlBlob(new Blob([JSON.stringify({app:'DJ Capital',date:todayISO(),state:S,receipts:rc})],{type:'application/json'}),'DJ-Capital-Backup-'+todayISO()+'.json');S.settings=S.settings||{};S.settings.lastBackup=todayISO();save();render();toast('Backup gespeichert. Hebe die Datei gut auf.')})();return}
   case 'restoreDlg':modal('<h3>Backup einspielen</h3><p class="hint">Das ersetzt alle jetzigen Daten. Wähle eine Backup-Datei oder füge den Backup-Text aus der alten Version ein.</p><input type="file" id="f-bkfile" accept=".json,application/json,text/plain"><textarea class="big" id="f-bk" placeholder="Oder Backup-Text hier einfügen"></textarea><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="restoreOk">Wiederherstellen</button></div>');return;
   case 'restoreOk':{(async()=>{try{const f=$('#f-bkfile').files[0];const txt=f?await f.text():$('#f-bk').value;let x=JSON.parse(txt);let rc=null;if(x&&x.state&&x.app){rc=x.receipts;x=x.state}if(!x||!Array.isArray(x.props))throw 0;S=migrate(x);S.settings=S.settings||{remind:true};if(rc)for(const k of Object.keys(rc))await idbSet(RC,k,rc[k]);await doSave();closeModal();render();toast('Backup eingespielt.')}catch(err){toast('Das ist kein gültiges Backup.')}})();return}
   }
@@ -1551,14 +1541,14 @@ async function bkFetch(manual){if(bkBusy||!bkReady())return;const b=bk();if(!b.c
   }finally{bkBusy=false}}
 function bankAfterBoot(){if(BK_CB&&!bankAfterBoot.done){bankAfterBoot.done=true;bkCallback(BK_CB);return}
   if(bankAfterBoot.done)return;bankAfterBoot.done=true;
-  bkAuto()}
+  bkAuto();if(typeof mailPull==='function')setTimeout(()=>mailPull(),1500)}
 async function bkAuto(){if(!bkReady()||!bk().conns.length)return;
   if(loggedIn()){await bkSchedPush(false);await bkInbox();
-    if(bkSched.active&&bkSched.last_run&&Date.now()-bkSched.last_run<13*3600e3)return}
+    if(bkSched.active&&bkSched.last_run&&Date.now()-bkSched.last_run<16*3600e3)return}
   if(Date.now()-(bk().lastFetch||0)>4*3600e3)bkFetch(false)}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S&&!locked&&loggedIn()&&Date.now()-bkInboxT>120e3)bkInbox().then(()=>{if(curTab()==='mehr')render()})});
 setInterval(()=>{if(!document.hidden&&S&&!locked&&loggedIn())bkInbox()},15*60e3);
-{const _rg=runGo;runGo=function(){_rg();(async()=>{try{if(loggedIn())await syncPull(true)}catch(e){}bankAfterBoot()})()}}
+{const _rg=runGo;runGo=function(){try{if(!sessionStorage.getItem('djc-hs')){sessionStorage.setItem('djc-hs','1');if(S&&S.settings&&S.settings.hideStart&&!ui.hide){ui.hide=true;saveUi();render()}}}catch(e){}_rg();(async()=>{try{if(loggedIn())await syncPull(true)}catch(e){}bankAfterBoot()})()}}
 {const _ri=remindItems;remindItems=function(){const out=_ri();if(S.bank&&S.bank.conns)S.bank.conns.forEach(c=>{const u=(c.valid_until||'').slice(0,10);const d=u?daysTo(u):999;
   if(c.err==='expired'||d<=14)out.push({date:u||todayISO(),t:'Bankverbindung '+c.aspsp.name,s:c.err==='expired'||d<0?'Abgelaufen, bitte neu verbinden':'Läuft am '+dfmt(u)+' ab, bitte neu verbinden',lvl:c.err==='expired'||d<0?'late':'partial',act:'bank'})});
   return out.sort((a,b)=>a.date.localeCompare(b.date))}}
@@ -1862,3 +1852,244 @@ PREFIX.push(['Zinsbindung endet: ','Fixed rate ends: ','Fiksna kamata istječe: 
 I18N.push(['Mitzählen','Count it','Uračunaj'],['Rausnehmen','Leave out','Izuzmi'],['Zählt als regelmäßige Einnahme mit.','Counts as regular income.','Računa se kao redoviti prihod.'],['Zählt nicht mit.','Not counted.','Ne računa se.']);
 I18N.push(['Dein Stand · üblicher Monat','Your status · typical month','Tvoje stanje · uobičajeni mjesec'],['Rechnung ansehen','View calculation','Pogledaj izračun'],['Keine regelmäßige Einnahme erkannt','No regular income detected','Nije prepoznat redoviti prihod'],['Tippe auf „Rechnung ansehen“ und wähle, welche Einnahmen jeden Monat kommen.','Tap "View calculation" and choose which income arrives every month.','Dodirni „Pogledaj izračun“ i odaberi koji prihodi stižu svaki mjesec.']);
 I18N.push(['Alle rausnehmen','Leave all out','Izuzmi sve'],['Keine Buchung ist ausgewählt.','No transaction is selected.','Nijedna transakcija nije odabrana.'],['Mit dem Haken wählst du bei jeder Buchung, ob sie zum regelmäßigen Einkommen gehört. Einmalige Rechnungen nimmst du so heraus.','Use the tick to choose for each transaction whether it belongs to your regular income. This is how you take out one-off invoices.','Kvačicom za svaku transakciju biraš pripada li redovitom prihodu. Tako izuzimaš jednokratne račune.']);
+/* ---------- Eingangsrechnungen (Gmail → Worker → App) ---------- */
+var RBA_PKG='co.infinum.rba.eva';
+var billBusy=false,billT=0;
+function bills(){return S.bills||(S.bills=[])}
+function billOpen(){return bills().filter(b=>b.status==='open')}
+function mailOn(){return !!(S.mail&&S.mail.on)}
+function slug(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[đĐ]/g,'d').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,30)||'Racun'}
+function hrNum(s){s=String(s||'').trim();if(!s)return NaN;if(/,\d{1,2}$/.test(s))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'');return parseFloat(s)}
+function parseHub3(t){const L=String(t).replace(/\r/g,'').split('\n');if(!/^HRVHUB30/i.test(L[0]||''))return null;
+  const amt=parseInt((L[2]||'').replace(/\D/g,''),10)/100;
+  return {kind:'hub3',cur:(L[1]||'EUR').trim(),amount:isFinite(amt)?amt:null,payee:(L[6]||'').trim(),payeeAddr:[(L[7]||'').trim(),(L[8]||'').trim()].filter(Boolean).join(', '),iban:(L[9]||'').replace(/\s/g,'').toUpperCase(),ref:[(L[10]||'').trim(),(L[11]||'').trim()].filter(Boolean).join(' '),purpose:(L[13]||'').trim()}}
+function parseEpc(t){const L=String(t).replace(/\r/g,'').split('\n');if((L[0]||'').trim()!=='BCD')return null;
+  const m=(L[7]||'').match(/^([A-Z]{3})?([\d.]+)/);
+  return {kind:'epc',cur:(m&&m[1])||'EUR',amount:m?parseFloat(m[2]):null,payee:(L[5]||'').trim(),iban:(L[6]||'').replace(/\s/g,'').toUpperCase(),ref:(L[9]||'').trim(),purpose:(L[10]||L[9]||'').trim()}}
+function textGuess(text){const T=String(text||'').replace(/\s+/g,' ');const o={};
+  const dm=T.match(/(datum\s+dospije.{1,3}a|rok\s+(?:za\s+)?pla.{1,3}anj[ae]|dospije.{1,3}e|valuta\s+pla.{1,3}anja|platiti\s+do|f.{1,2}llig(?:\s+am|\s+bis)?|zahlbar\s+bis|zahlungsziel|due\s+date)[^0-9]{0,25}(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})/i);
+  if(dm){let y=+dm[4];if(y<100)y+=2000;o.due=y+'-'+String(dm[3]).padStart(2,'0')+'-'+String(dm[2]).padStart(2,'0')}
+  const am=T.match(/(ukupno\s+za\s+(?:platiti|pla.{1,3}anje)|za\s+platiti|iznos\s+za\s+pla.{1,3}anje|ukupan\s+iznos|ukupno|gesamtbetrag|rechnungsbetrag|zu\s+zahlen|endbetrag|total)[^0-9]{0,30}(\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})|\d+(?:[.,]\d{2}))/i);
+  if(am){const v=hrNum(am[2].replace(/\s/g,''));if(v>0)o.amount=v}
+  const ib=T.match(/\b(HR\d{2}\s?(?:\d{4}\s?){4}\d{1}|DE\d{2}\s?(?:\d{4}\s?){4}\d{2})\b/);if(ib)o.iban=ib[1].replace(/\s/g,'');
+  return o}
+async function scanBill(bytes,type){const out={text:'',code:'',fmt:'',crop:''};const cv=[];
+  try{if(/pdf/i.test(type)){const L=await loadPdfjs();const doc=await L.getDocument({data:bytes.slice(0)}).promise;
+      for(let p=1;p<=Math.min(doc.numPages,3);p++){const pg=await doc.getPage(p);try{const tc=await pg.getTextContent();out.text+=tc.items.map(i=>i.str).join(' ')+'\n'}catch(e){}
+        const vp=pg.getViewport({scale:3});const c=document.createElement('canvas');c.width=Math.round(vp.width);c.height=Math.round(vp.height);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:x,viewport:vp}).promise;cv.push(c)}}
+    else{const bmp=await createImageBitmap(new Blob([bytes],{type}));const c=document.createElement('canvas');c.width=bmp.width;c.height=bmp.height;c.getContext('2d').drawImage(bmp,0,0);cv.push(c)}}catch(e){out.err='render'}
+  if(!('BarcodeDetector' in window)){out.noDetector=true;return out}
+  let det;try{det=new BarcodeDetector({formats:['pdf417','qr_code']})}catch(e){out.noDetector=true;return out}
+  let best=null;
+  for(const c of cv){let L=[];try{L=await det.detect(c)}catch(e){}
+    for(const r of L){const v=r.rawValue||'';const score=/^HRVHUB30/i.test(v)?3:/^BCD\n/.test(v)?2:1;if(!best||score>best.score)best={score,r,c}}
+    if(best&&best.score>=2)break}
+  if(best){out.code=best.r.rawValue;out.fmt=best.r.format;const bb=best.r.boundingBox,c=best.c;
+    const m=Math.max(bb.width,bb.height)*0.08,x0=Math.max(0,bb.x-m),y0=Math.max(0,bb.y-m),w=Math.min(c.width-x0,bb.width+2*m),h=Math.min(c.height-y0,bb.height+2*m);
+    const k=Math.max(1,900/w),o=document.createElement('canvas');o.width=Math.round(w*k)+80;o.height=Math.round(h*k)+80;const g=o.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,o.width,o.height);g.imageSmoothingEnabled=false;g.drawImage(c,x0,y0,w,h,40,40,w*k,h*k);out.crop=o.toDataURL('image/png')}
+  return out}
+async function openSealed(text){const o=JSON.parse(text),ek=bk().ek;if(!ek)throw new Error('nokey');
+  const priv=await crypto.subtle.importKey('jwk',ek.priv,{name:'ECDH',namedCurve:'P-256'},false,['deriveKey']);
+  const pub=await crypto.subtle.importKey('jwk',o.epk,{name:'ECDH',namedCurve:'P-256'},false,[]);
+  const key=await crypto.subtle.deriveKey({name:'ECDH',public:pub},priv,{name:'AES-GCM',length:256},false,['decrypt']);
+  return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(o.iv)},key,b64d(o.ct)))}
+async function mailFile(fid){const r=await fetch(SRV+'/file/'+encodeURIComponent(fid),{headers:{Authorization:'Bearer '+acct.token}});if(!r.ok)throw new Error('file');return await openSealed(await r.text())}
+function billWhere(b,text){const T=String(text||'')+' '+(b.ref||'')+' '+(b.purpose||'');const N=T.replace(/[^0-9A-Za-z]/g,'').toUpperCase();let best=null;
+  for(const m of S.meterDevs||[]){for(const k of ['number','omm','account','code']){const v=String(m[k]||'').replace(/[^0-9A-Za-z]/g,'').toUpperCase();if(v.length<4)continue;if(N.includes(v)&&(!best||v.length>best.len))best={m,len:v.length}}}
+  if(best){const m=best.m;b.meterId=m.id;b.propertyId=m.propertyId;b.place=m.place||'';b.kind=m.kind||'';return}
+  const low=T.toLowerCase();for(const p of S.props||[]){const st=String(p.address||'').toLowerCase().split(',')[0].trim();if(st.length>=6&&low.includes(st)){b.propertyId=p.id;return}}}
+function billWhereText(b){const p=propOf(b.propertyId);if(!p)return '';return [p.name,b.place,b.kind].filter(Boolean).join(' · ')}
+async function billFromMail(meta){const id=uid(),f=(meta.files||[])[0];
+  const b={id,mid:meta.id,from:meta.from||'',subject:meta.subject||'',recv:(meta.date||new Date().toISOString()).slice(0,10),files:meta.files||[],status:'open',created:Date.now()};
+  const em=(b.from.match(/<([^>]+)>/)||[0,b.from])[1].trim().toLowerCase();b.email=em;
+  b.payee=(b.from.replace(/<[^>]*>/,'').replace(/"/g,'').trim())||em;
+  let scan=null;for(const ff of meta.files||[]){try{const bytes=await mailFile(ff.fid);const s=await scanBill(bytes,ff.type);if(!scan||(s.code&&!scan.code))scan=s;if(s.code)break}catch(e){}}
+  const g=textGuess((scan&&scan.text||'')+' '+(meta.text||''));
+  const p=scan&&scan.code?(parseHub3(scan.code)||parseEpc(scan.code)):null;
+  if(p){b.amount=p.amount;b.payee=p.payee||b.payee;b.iban=p.iban;b.ref=p.ref;b.purpose=p.purpose;b.code=p.kind}
+  billWhere(b,(scan&&scan.text||'')+' '+(meta.text||'')+' '+(meta.subject||''));
+  if(b.amount==null&&g.amount)b.amount=g.amount;if(!b.iban&&g.iban)b.iban=g.iban;if(g.due)b.due=g.due;
+  if(scan&&scan.crop)try{await idbSet(KV,'bc:'+id,scan.crop)}catch(e){}
+  b.hasCode=!!(scan&&scan.crop);b.noDetector=!!(scan&&scan.noDetector);
+  return b}
+async function mailPull(){if(billBusy||!loggedIn()||!mailOn()||!bk().ek)return 0;billBusy=true;billT=Date.now();let added=0;
+  try{const j=await bkApi('/mail/inbox');const ids=[];
+    for(const it of j.items||[]){let meta;try{meta=JSON.parse(new TextDecoder().decode(await openSealed(it.meta)))}catch(e){continue}
+      const em=((meta.from||'').match(/<([^>]+)>/)||[0,meta.from||''])[1].trim().toLowerCase();
+      if(bills().some(b=>b.mid===meta.id)){ids.push(it.id);continue}
+      if((S.billIgnore||[]).includes(em)){ids.push(it.id);for(const f of meta.files||[])bkApi('/file/'+f.fid,{method:'DELETE'}).catch(()=>{});continue}
+      bills().unshift(await billFromMail(meta));ids.push(it.id);added++}
+    if(ids.length){save();await bkApi('/mail/ack',{method:'POST',body:JSON.stringify({ids})})}
+    if(billMatch()||added){save();render()}
+    if(added)toast(added===1?'Neue Rechnung eingegangen.':added+' neue Rechnungen eingegangen.')}
+  catch(e){}finally{billBusy=false}return added}
+function billMatch(){let n=0;const used=new Set(bills().filter(b=>b.paidTx).map(b=>b.paidTx));
+  for(const b of billOpen()){if(!(b.amount>0))continue;const from=Date.parse(b.recv||todayISO())-3*864e5;
+    const C=S.txs.filter(t=>t.amount<0&&Math.abs(t.amount+b.amount)<0.011&&Date.parse(t.date)>=from&&!used.has(t.id));if(!C.length)continue;
+    const ib=String(b.iban||'').replace(/\s/g,'').toUpperCase(),ref=String(b.ref||'').replace(/^HR\d\d\s*/,'').replace(/\s/g,'');
+    const strong=C.find(t=>(ib&&String(t.iban||'').replace(/\s/g,'').toUpperCase()===ib)||(b.payee&&nameSim(t.name||'',b.payee))||(ref.length>=4&&String(t.purpose||'').replace(/\s/g,'').includes(ref)));
+    const t=strong||(C.length===1&&Date.parse(C[0].date)-from<50*864e5?C[0]:null);
+    if(t){b.status='paid';b.paidTx=t.id;b.paidDate=t.date;used.add(t.id);n++;
+      if(b.propertyId&&(t.type==='open'||(t.type==='expense'&&!t.propertyId))){const wasOpen=t.type==='open';t.type='expense';t.propertyId=b.propertyId;if(wasOpen||!t.category){const c=(S.cats||[]).find(c=>b.kind&&nrm(c).includes(nrm(b.kind)))||(S.cats||[]).find(c=>/nebenkost|betriebskost|rezij|strom|wasser/i.test(nrm(c)));if(c)t.category=c}}}}
+  return n}
+function rbaOpen(){location.href='intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package='+RBA_PKG+';S.browser_fallback_url='+encodeURIComponent('https://play.google.com/store/apps/details?id='+RBA_PKG)+';end'}
+async function billCodeImg(b){let u=null;try{u=await idbGet(KV,'bc:'+b.id)}catch(e){}
+  if(!u&&b.files&&b.files.length){for(const f of b.files){try{const s=await scanBill(await mailFile(f.fid),f.type);if(s.crop){u=s.crop;await idbSet(KV,'bc:'+b.id,u);break}}catch(e){}}}
+  return u}
+async function billSaveCode(b){const u=await billCodeImg(b);if(!u){toast('Auf dieser Rechnung wurde kein Barcode gefunden.');return false}
+  const bl=await (await fetch(u)).blob();dlBlob(bl,'Racun_'+slug(b.payee)+(b.amount?'_'+String(b.amount.toFixed(2)).replace('.',',')+'EUR':'')+'.png');return true}
+async function billPay(id){const b=bills().find(x=>x.id===id);if(!b)return;const ok=await billSaveCode(b);b.payAt=Date.now();save();
+  if(ok)toast('Barcode liegt in der Galerie (Album Download). mojaRBA öffnet sich …');setTimeout(rbaOpen,ok?1400:200)}
+async function billView(id){const b=bills().find(x=>x.id===id);if(!b||!b.files||!b.files[0])return;const f=b.files[0];const w=window.open('','_blank');
+  try{const bytes=await mailFile(f.fid);const url=URL.createObjectURL(new Blob([bytes],{type:f.type}));if(w)w.location.href=url;else{const a=document.createElement('a');a.href=url;a.download=f.name;a.click()}setTimeout(()=>URL.revokeObjectURL(url),120000)}
+  catch(e){if(w)w.close();toast('Die Rechnung konnte nicht geladen werden.')}}
+function billDue(b){if(!b.due)return '';const d=daysTo(b.due);return d<0?'seit '+(-d)+(d===-1?' Tag':' Tagen')+' fällig':d===0?'heute fällig':'fällig in '+d+(d===1?' Tag':' Tagen')}
+function billRow(b,compact){const late=b.due&&daysTo(b.due)<0&&b.status==='open';
+  return '<div class="bill'+(b.status!=='open'?' done':'')+(late?' late':'')+'"><div class="bhead"><span class="bic">'+ICON.bill+'</span><span class="bt2"><b>'+esc(b.payee||'Rechnung')+'</b><small>'+(billWhereText(b)?'<i class="bwhere">'+esc(billWhereText(b))+'</i>':'')+(b.status==='paid'?'Bezahlt am '+dfmt(b.paidDate||todayISO()):b.status==='ignored'?'Keine Rechnung':(b.due?esc(billDue(b))+' · '+dfmt(b.due):'Eingegangen am '+dfmt(b.recv)))+'</small></span><span class="num'+(b.status==='open'?'':' muted')+'">'+(b.amount!=null?eur(b.amount):'–')+'</span></div>'
+    +(compact?'':'<div class="bmeta">'+(b.subject?'<small>'+esc(b.subject)+'</small>':'')+(b.iban?'<small>IBAN '+esc(b.iban)+(b.ref?' · '+esc(b.ref):'')+'</small>':'')+(!b.hasCode&&b.status==='open'?'<small class="neg">'+(b.noDetector?'Dieses Gerät kann Barcodes nicht lesen.':'Kein Barcode gefunden.')+'</small>':'')+'</div>')
+    +(b.status==='open'?'<div class="form bact"><button class="primary" data-act="billPay" data-id="'+b.id+'">'+ICON.pay+' In mojaRBA bezahlen</button>'+(compact?'':'<button data-act="billCode" data-id="'+b.id+'">Barcode speichern</button><button data-act="billView" data-id="'+b.id+'">Rechnung ansehen</button><button data-act="billMore" data-id="'+b.id+'">…</button>')+'</div>':'')+'</div>'}
+function billCard(){if(!mailOn())return '';const L=billOpen();if(!L.length)return '';
+  return '<section class="card accent ab"><div class="h2row"><h3><span class="hic">'+ICON.bill+'</span>Rechnungen · '+L.length+' offen</h3><a class="lnk" href="#mehr/bills">Alle ›</a></div>'+L.slice(0,2).map(b=>billRow(b,true)).join('')+'</section>'}
+function billPage(){if(!SRV)return '<p class="hint">Für Rechnungen aus Gmail brauchst du ein Konto in der App.</p>';
+  if(!loggedIn())return '<section class="group"><p class="hint">Melde dich an, damit Rechnungen aus deiner Gmail automatisch hier erscheinen.</p><button class="primary" data-act="authOpen">Anmelden</button></section>';
+  const L=bills(),open=L.filter(b=>b.status==='open'),done=L.filter(b=>b.status!=='open').slice(0,15);
+  const pushOk=pushState();
+  let h='';
+  if(!mailOn()||!pushOk)h+='<section class="card accent ab"><h3>Einrichten</h3><div class="steps">'
+    +'<div class="step'+(mailOn()?' ok':'')+'"><span class="sn">1</span><span><b>Gmail verbinden</b><small>Ein kleines Skript in deinem Google-Konto schickt neue Rechnungen verschlüsselt an die App.</small></span>'+(mailOn()?'<em>✓</em>':'<button class="small primary" data-act="mailSetup">Starten</button>')+'</div>'
+    +'<div class="step'+(pushOk?' ok':'')+'"><span class="sn">2</span><span><b>Mitteilungen erlauben</b><small>Dein Handy meldet sich, sobald eine Rechnung da ist, auch wenn die App zu ist.</small></span>'+(pushOk?'<em>✓</em>':'<button class="small primary" data-act="pushOn">Erlauben</button>')+'</div></div></section>';
+  h+=open.length?'<h3 class="gt lh">Offen · '+open.length+'</h3>'+open.map(b=>billRow(b)).join(''):(mailOn()?'<div class="empty">Keine offenen Rechnungen. Neue Rechnungen aus Gmail erscheinen hier von selbst.</div>':'');
+  if(done.length)h+='<h3 class="gt lh">Erledigt</h3>'+done.map(b=>billRow(b,true)).join('');
+  if(mailOn())h+='<section class="group"><div class="form"><button data-act="mailPull">Jetzt prüfen</button><button data-act="mailSetup">Skript neu erstellen</button>'+(pushOk?'<button data-act="pushTest">Mitteilung testen</button>':'')+'</div><p class="hint">Das Skript in deinem Google-Konto prüft jede Stunde. Die App hakt Rechnungen von selbst ab, sobald die Zahlung im Bankabruf auftaucht.</p></section>';
+  return h}
+function scriptText(u){return [
+'// DJ Capital – Rechnungen aus Gmail',
+'// Läuft in deinem eigenen Google-Konto. Schickt neue Rechnungen verschlüsselt an deine App.',
+'// Suchbegriffe kannst du unten bei SUCHE anpassen.',
+'var ZIEL = "'+u+'";',
+'var SUCHE = \'has:attachment newer_than:3d -in:sent -label:djc (filename:pdf OR filename:jpg OR filename:png) (rechnung OR račun OR racun OR faktura OR invoice OR uplatnica OR "za plaćanje" OR "zur zahlung")\';',
+'',
+'function einrichten() {',
+'  ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });',
+'  ScriptApp.newTrigger("pruefen").timeBased().everyHours(1).create();',
+'  pruefen();',
+'}',
+'',
+'function pruefen() {',
+'  var lab = GmailApp.getUserLabelByName("djc") || GmailApp.createLabel("djc");',
+'  GmailApp.search(SUCHE, 0, 20).forEach(function (th) {',
+'    var ok = true;',
+'    th.getMessages().forEach(function (m) {',
+'      var files = m.getAttachments().filter(function (a) {',
+'        return /^(application\\/pdf|image\\/(jpeg|png))$/i.test(a.getContentType()) && a.getSize() < 6000000;',
+'      }).slice(0, 5).map(function (a) {',
+'        return { name: a.getName(), type: a.getContentType(), data: Utilities.base64Encode(a.getBytes()) };',
+'      });',
+'      if (!files.length) return;',
+'      var r = UrlFetchApp.fetch(ZIEL, { method: "post", contentType: "application/json", muteHttpExceptions: true,',
+'        payload: JSON.stringify({ id: m.getId(), from: m.getFrom(), subject: m.getSubject(), date: m.getDate().toISOString(), text: m.getPlainBody().slice(0, 3000), files: files }) });',
+'      if (r.getResponseCode() !== 200) ok = false;',
+'    });',
+'    if (ok) th.addLabel(lab);',
+'  });',
+'}'].join('\n')}
+async function mailSetup(){if(!loggedIn())return;let j;try{const ek=await bkKeys();j=await bkApi('/mail/setup',{method:'POST',body:JSON.stringify({pub:JSON.stringify(ek.pub)})})}catch(e){toast('Der Server ist nicht erreichbar. Ist der neue Worker eingespielt?');return}
+  S.mail={on:true,since:Date.now()};save();render();const code=scriptText(j.url);
+  modal('<div class="mhead"><div><h3>Gmail verbinden</h3><small>Einmalig, dauert etwa 3 Minuten</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
+    +'<ol class="howto"><li>Tippe auf <b>Skript kopieren</b>.</li><li>Öffne <b>script.google.com</b> (am besten am Computer), melde dich mit deinem Gmail-Konto an und tippe auf <b>Neues Projekt</b>.</li><li>Lösche den vorhandenen Text, füge das Skript ein und speichere (Diskette oben).</li><li>Wähle oben die Funktion <b>einrichten</b> und tippe auf <b>Ausführen</b>.</li><li>Google fragt nach Berechtigungen: <b>Berechtigungen prüfen</b> → dein Konto → <b>Erweitert</b> → <b>Zu Unbenanntes Projekt (unsicher) wechseln</b> → <b>Zulassen</b>. Die Warnung kommt, weil Google dein eigenes Skript nicht geprüft hat.</li><li>Fertig. Das Skript schaut jetzt jede Stunde nach neuen Rechnungen.</li></ol>'
+    +'<textarea id="f-script" class="code" readonly rows="8">'+esc(code)+'</textarea><div class="mact"><button data-act="close">Schließen</button><button class="primary" data-act="copyScript">Skript kopieren</button></div>'
+    +'<p class="hint">Im Skript steht ein geheimer Schlüssel nur für dein Konto. Gib es nicht weiter. „Skript neu erstellen“ macht den alten Schlüssel ungültig.</p>')}
+function pushState(){try{return 'Notification' in window&&Notification.permission==='granted'&&!!localStorage.getItem('djc-push')}catch(e){return false}}
+function b64uDec(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+async function pushOn(){if(!loggedIn())return;if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){toast('Dieses Gerät oder dieser Browser kann keine Mitteilungen empfangen. Installiere die App über Chrome.');return}
+  const perm=await Notification.requestPermission();if(perm!=='granted'){toast('Mitteilungen sind blockiert. Erlaube sie in den Einstellungen des Handys für My Capital.');return}
+  try{const reg=await navigator.serviceWorker.ready;const {key}=await bkApi('/push/key');let sub=await reg.pushManager.getSubscription();
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uDec(key)});
+    await bkApi('/push/sub',{method:'POST',body:JSON.stringify({sub:sub.toJSON()})});localStorage.setItem('djc-push',sub.endpoint);render();toast('Mitteilungen sind eingeschaltet.')}
+  catch(e){toast('Mitteilungen konnten nicht eingeschaltet werden.')}}
+async function pushOff(){try{const reg=await navigator.serviceWorker.ready;const sub=await reg.pushManager.getSubscription();if(sub){await bkApi('/push/sub',{method:'DELETE',body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{});await sub.unsubscribe()}}catch(e){}localStorage.removeItem('djc-push');render()}
+function billMoreDlg(id){const b=bills().find(x=>x.id===id);if(!b)return;
+  modal('<h3>'+esc(b.payee||'Rechnung')+'</h3><div class="grid2"><label>Betrag (€)<input id="f-bamt" inputmode="decimal" value="'+(b.amount!=null?String(b.amount).replace('.',','):'')+'"></label><label>Fällig am<input id="f-bdue" type="date" value="'+esc(b.due||'')+'"></label></div><label>Empfänger<input id="f-bpay" value="'+esc(b.payee||'')+'"></label>'+(immoOn()&&S.props.length?'<label>Für welche Immobilie<select id="f-bprop"><option value="">Privat</option>'+S.props.map(p=>'<option value="'+p.id+'"'+(p.id===b.propertyId?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></label>':'')
+    +'<div class="mact"><button data-act="billPaid" data-id="'+id+'">Schon bezahlt</button><button data-act="billIgnore" data-id="'+id+'">Keine Rechnung</button><button class="primary" data-act="billSave" data-id="'+id+'">Speichern</button></div>')}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,id=b.dataset.id;
+  if(!/^(bill|mail|push|copyScript)/.test(a))return;const B=id?bills().find(x=>x.id===id):null;
+  if(a==='billPay')billPay(id);
+  else if(a==='billCode'&&B)billSaveCode(B).then(ok=>{if(ok)toast('Barcode gespeichert (Galerie, Album Download).')});
+  else if(a==='billView')billView(id);
+  else if(a==='billMore')billMoreDlg(id);
+  else if(a==='billSave'&&B){const v=hrNum($('#f-bamt').value);B.amount=isFinite(v)?v:null;B.due=$('#f-bdue').value||'';B.payee=$('#f-bpay').value.trim()||B.payee;if($('#f-bprop')){const np=$('#f-bprop').value;if(np!==(B.propertyId||'')){B.propertyId=np;B.meterId='';B.place='';B.kind=''}}closeModal();billMatch();save();render()}
+  else if(a==='billPaid'&&B){B.status='paid';B.paidDate=todayISO();closeModal();save();render()}
+  else if(a==='billIgnore'&&B){B.status='ignored';if(B.email){S.billIgnore=S.billIgnore||[];if(!S.billIgnore.includes(B.email))S.billIgnore.push(B.email)}closeModal();save();render();toast('Von diesem Absender kommen keine Rechnungen mehr.')}
+  else if(a==='mailSetup')mailSetup();
+  else if(a==='mailPull')mailPull().then(n=>{if(!n)toast('Keine neuen Rechnungen.')});
+  else if(a==='pushOn')pushOn();
+  else if(a==='pushOff')pushOff();
+  else if(a==='pushTest')bkApi('/push/test',{method:'POST'}).then(j=>toast(j.sent?'Mitteilung ist unterwegs.':'Kein Gerät für Mitteilungen angemeldet.')).catch(()=>toast('Der Server ist nicht erreichbar.'));
+  else if(a==='copyScript'){const t=$('#f-script');(navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>toast('Skript kopiert.')).catch(()=>{t.select();document.execCommand('copy');toast('Skript kopiert.')})}
+});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S&&!locked&&loggedIn()&&mailOn()&&Date.now()-billT>60e3)mailPull()});
+setInterval(()=>{if(!document.hidden&&S&&!locked&&loggedIn()&&mailOn())mailPull()},15*60e3);
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.t==='bill'&&S&&loggedIn())mailPull()});
+function swBtn(on,act,label,extra){return '<button class="sw'+(on?' on':'')+'" role="switch" aria-checked="'+(on?'true':'false')+'" aria-label="'+esc(label)+'" data-act="'+act+'"'+(extra||'')+'><i></i></button>'}
+var SCAT=[[/restaurant|caf|essen geh|lieferdienst/i,'<path d="M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 0-3 3-3 6s1 4 3 4v8"/>'],[/shopping|kleidung|amazon|online/i,'<path d="M6 7h12l-1 13H7zM9 7a3 3 0 0 1 6 0"/>'],[/lebensmittel|supermarkt|einkauf/i,'<path d="M3 4h2l2 11h11l2-8H7M9 20h.01M17 20h.01"/>'],[/abo|stream|netflix|spotify/i,'<path d="M3 6h18v11H3zM8 21h8M12 17v4"/>'],[/auto|tank|kfz|benzin/i,'<path d="M5 16l1-5 2-4h8l2 4 1 5zM5 16v3M19 16v3M7 13h.01M17 13h.01"/>'],[/freizeit|hobby|urlaub|reise/i,'<path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.6 7.1 18.2 8 12.7 4 8.8l5.5-.8z"/>'],[/drogerie|gesundheit|apotheke/i,'<path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z"/>']];
+function scatIcon(c){const m=SCAT.find(x=>x[0].test(c));return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(m?m[1]:'<circle cx="12" cy="12" r="4"/>')+'</svg>'}
+function wishPlanDlg(){S.settings=S.settings||{};const mode=S.settings.saveMode||'n';const x=wishCalc(mode),o=wishCalc(mode==='a'?'n':'a');
+  const W=(S.wishes||[]).filter(w=>!w.done),E0=wishEta(x.base),E=wishEta(x.base+x.extra);const openN=S.txs.filter(t=>t.type==='open').length;
+  const pct=w=>Math.min(100,Math.round((+w.saved||0)/((+w.price)||1)*100));
+  let h='<div class="mhead"><div><h3>Sparplan</h3><small>Aus deinen Buchungen der letzten Monate</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
+    +'<div class="seg" role="tablist"><button data-act="wishMode" data-v="n"'+(mode==='n'?' class="on" aria-selected="true"':'')+'>Normal</button><button data-act="wishMode" data-v="a" class="'+(mode==='a'?'on ':'')+'aggr"'+(mode==='a'?' aria-selected="true"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-4 3-6 1 2 2 3 3 3 0-3-1-5 0-8z"/></svg>Aggressiv</button></div>';
+  if(W.length){const e=E[0],d=E0[0].m!=null&&e.m!=null?E0[0].m-e.m:null,p=pct(e.w),C=2*Math.PI*32;
+    h+='<section class="goal"><svg viewBox="0 0 80 80" class="ring" aria-hidden="true"><circle cx="40" cy="40" r="32"/><circle cx="40" cy="40" r="32" class="rv" stroke-dasharray="'+(C*p/100).toFixed(1)+' '+C.toFixed(1)+'" transform="rotate(-90 40 40)"/><text x="40" y="45" text-anchor="middle">'+p+' %</text></svg><div><small>Nächstes Ziel</small><b>'+esc(e.w.title)+' · '+eur(+e.w.price||0)+'</b><span class="'+(e.m==null?'neg':'pos')+'">'+(x.has?esc(etaText(e))+(d>0?' · '+d+(d===1?' Monat':' Monate')+' früher':''):'Noch zu wenig Daten')+'</span>'+(+e.w.saved?'<small>'+eur(+e.w.saved)+' schon gespart</small>':'')+'</div></section>'}
+  h+='<div class="sec"><span class="sno s1">1</span><b>Dein Monat</b></div><section class="secbox">';
+  if(x.has){const inc=Math.max(1,x.wb.inc||0),out=Math.max(0,x.wb.out||0),ex=Math.max(0,x.extra),rest=Math.max(0,inc-out-ex);const P=v=>Math.max(0,Math.min(100,v/inc*100)).toFixed(1);
+    h+='<div class="flow" aria-hidden="true"><i class="fo" style="width:'+P(out)+'%"></i><i class="fr" style="width:'+P(rest)+'%"></i><i class="fx" style="width:'+P(ex)+'%"></i></div>'
+      +'<div class="g2"><div><small>Einnahmen</small><b class="num">'+eur(Math.round(x.wb.inc||0))+'</b></div><div><small>Ausgaben</small><b class="num neg">'+eur(Math.round(out))+'</b></div><div><small>Bleibt jetzt</small><b class="num'+(x.base<0?' neg':'')+'">'+eur(Math.round(x.base))+'</b></div><div><small>Mit Sparplan</small><b class="num pos">'+eur(Math.round(x.base+x.extra))+' <em class="chip2">+'+eur(x.extra)+'</em></b></div></div>'
+      +'<button class="lnk" data-act="wishRate">Rechnung ansehen ›</button>'
+      +'<p class="hint">'+(mode==='a'?'Aggressiv: alles Verzichtbare fällt weg. Normal brächte '+eur(o.extra)+' im Monat.':'Normal: überall etwas weniger, ohne großen Verzicht. Aggressiv brächte '+eur(o.extra)+' im Monat.')+'</p>'}
+  else h+='<p class="hint">Noch zu wenig Daten. Sobald Umsätze aus drei Monaten da sind, rechnet die App den Plan aus.</p>';
+  if(openN)h+='<p class="hint neg">'+openN+' Umsätze sind noch nicht zugeordnet. Der Plan wird genauer, wenn du sie einsortierst.</p>';
+  h+='</section><div class="sec"><span class="sno s2">2</span><b>Deine Wünsche</b><button class="small" data-act="wishAdd">+ Wunsch</button></div><section class="secbox">';
+  h+=W.length?E.map((e,i)=>'<div class="wrow"><div class="h2row"><b>'+esc(e.w.title)+'</b><span class="num">'+eur(+e.w.price||0)+'</span></div><span class="wbar big"><i style="width:'+pct(e.w)+'%"></i></span><div class="wfoot"><small>Ohne Sparen: '+esc(etaText(E0[i]))+'</small><small class="'+(e.m==null?'neg':'pos')+'">Mit Plan: '+esc(etaText(e))+'</small></div><div class="wact"><button class="ic sm" data-act="wishDone" data-id="'+e.w.id+'" aria-label="Als gekauft markieren">✓</button><button class="ic sm" data-act="wishEdit" data-id="'+e.w.id+'" aria-label="Wunsch bearbeiten">✎</button></div></div>').join(''):'<p class="hint">Noch kein Wunsch eingetragen. Der Sparplan zeigt trotzdem, was möglich ist.</p>';
+  const cutRows=x.rows.filter(r=>!r.fix&&!r.unknown);
+  h+='</section><div class="sec"><span class="sno s3">3</span><b>Hier sparst du</b><small>'+eur(x.extra)+' im Monat</small></div><section class="secbox cuts">';
+  h+=cutRows.length?cutRows.map(r=>'<div class="cut'+(r.kept?' off':'')+'"><span class="cic">'+scatIcon(r.c)+'</span><span class="ct2"><b>'+esc(r.c)+'</b><small>'+(r.kept?'Bleibt, hier sparst du nicht':eur(Math.round(r.avg))+' → '+eur(Math.max(0,Math.round(r.avg)-r.cut))+' · '+esc(r.how))+'</small></span>'+(r.kept||!r.cut?'':'<em class="chip2">−'+eur(r.cut)+'</em>')+swBtn(!r.kept,'wishKeep',r.c,' data-c="'+esc(r.c)+'"')+'</div>').join(''):'<p class="hint">Noch keine Ausgaben, bei denen sich Sparen lohnt.</p>';
+  h+='</section>'+(x.rows.some(r=>r.unknown)?'<p class="hint">Kreditkarte: Die Abrechnung zeigt nicht, wofür das Geld ausgegeben wurde. Schau hinein, dort stecken oft Abos und Spontankäufe.</p>':'')
+    +(x.rows.some(r=>r.fix)?'<p class="hint">Nicht angetastet: '+esc(x.rows.filter(r=>r.fix).map(r=>r.c).join(', '))+'.</p>':'')
+    +'<div class="form"><button data-act="tipsSave">Einzelne Posten ansehen</button></div><p class="hint">Der Plan ist eine Rechnung aus deinen Buchungen, keine Finanzberatung. Was verzichtbar ist, entscheidest du.</p>';
+  const mb=$('#modal .mbox'),st=mb?mb.scrollTop:0,keep=!$('#modal').hidden&&$('#modal .goal,#modal .sec');modal(h);if(keep){const m2=$('#modal .mbox');if(m2)m2.scrollTop=st}}
+function upChooser(kind){if(kind==='auszug'){const f=$('#f-file');f.value='';f.click();return}
+  modal('<h3>Beleg hinzufügen</h3><p class="hint">Foto vom Kassenbon oder ein Bild aus der Galerie.</p><div class="choose2"><button data-act="upCam"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b>Kamera</b></button><button data-act="upGal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5 12 12l2.5 2.5"/></svg><b>Datei suchen</b></button></div><div class="mact"><button data-act="close">Abbrechen</button></div>')}
+function remRows(){const T=todayISO(),A=remindItems(),own=(S.reminders||[]).filter(r=>!A.some(x=>x.rid===r.id)).map(r=>({date:r.date,t:r.title,rid:r.id,later:1}));
+  const L=A.concat(own).sort((a,b)=>a.date.localeCompare(b.date));const MS=['JAN','FEB','MÄR','APR','MAI','JUN','JUL','AUG','SEP','OKT','NOV','DEZ'];
+  const row=x=>{const d=daysTo(x.date),r=x.rid?(S.reminders||[]).find(y=>y.id===x.rid):null,cls=d<0?'late':d<=7?'soon':'later';
+    return '<div class="ritem '+cls+'"><span class="dblk"><b>'+x.date.slice(8,10)+'</b><span>'+MS[+x.date.slice(5,7)-1]+'</span></span><button class="rt" '+(r?'data-act="editRem" data-id="'+r.id+'"':x.act?'data-act="remGo" data-v="'+esc(x.act)+'"':'')+'><b>'+esc(x.t)+'</b><small>'+(d<0?'seit '+(-d)+(d===-1?' Tag':' Tagen'):d===0?'heute':'in '+d+(d===1?' Tag':' Tagen'))+(x.s&&!r?' · '+esc(x.s):'')+'</small>'+(r?(r.repeat==='yearly'||r.repeat==='monthly'?'<em class="rchip">↻ '+(r.repeat==='yearly'?'jährlich':'monatlich')+'</em>':''):'<em class="rchip app">von der App</em>')+'</button>'+(r?'<button class="okb" data-act="remDone" data-id="'+r.id+'" aria-label="Erledigt">✓</button>':x.act?'<button class="okb go" data-act="remGo" data-v="'+esc(x.act)+'" aria-label="Öffnen">›</button>':'')+'</div>'};
+  const G=[['late','Überfällig',L.filter(x=>daysTo(x.date)<0)],['soon','Heute und diese Woche',L.filter(x=>{const d=daysTo(x.date);return d>=0&&d<=7})],['later','Später',L.filter(x=>daysTo(x.date)>7)]];
+  return G.filter(g=>g[2].length).map(g=>'<div class="rgh '+g[0]+'"><i></i>'+g[1]+'</div>'+g[2].map(row).join('')).join('')||'<div class="empty">Keine Termine. Mit + legst du eigene an, zum Beispiel Versicherungen oder Komunalna naknada.</div>'}
+function remDlg(id){const r=id?(S.reminders||[]).find(x=>x.id===id):{title:'',date:todayISO(),repeat:'yearly',lead:30};if(!r)return;
+  modal('<h3>'+(id?'Erinnerung bearbeiten':'Neue Erinnerung')+'</h3><label>Woran?<input id="f-rt" value="'+esc(r.title)+'" placeholder="z. B. Gebäudeversicherung zahlen"></label><div class="grid2"><label>Fällig am<input id="f-rdt" type="date" value="'+esc(r.date)+'"></label><label>Wiederholen<select id="f-rrep"><option value="none"'+sel(r.repeat==='none')+'>Einmalig</option><option value="monthly"'+sel(r.repeat==='monthly')+'>Monatlich</option><option value="yearly"'+sel(r.repeat==='yearly')+'>Jährlich</option></select></label><label>Vorher anzeigen (Tage)<input id="f-rlead" type="number" min="0" max="365" value="'+(r.lead||30)+'"></label></div><div class="mact">'+(id?'<button class="danger" data-act="delRem" data-id="'+id+'">Löschen</button>':'')+'<button data-act="close">Abbrechen</button><button class="primary" data-act="saveRem" data-id="'+(id||'')+'">Speichern</button></div>')}
+function acctPage(){const LI=loggedIn(),st=S.settings||{},nm=st.owner||(LI?acct.email:''),ini=(nm||'DJ').split(/[\s@.]+/).filter(Boolean).slice(0,2).map(s=>s[0].toUpperCase()).join('')||'DJ';
+  const row=(ic,c,t,s,right,act)=>'<div class="srow"'+(act?' data-act="'+act+'" role="button" tabindex="0"':'')+'>'+mic(ic,c)+'<span class="stx"><b>'+t+'</b>'+(s?'<small>'+s+'</small>':'')+'</span>'+right+'</div>';
+  let h='<section class="prof">'+(LI?'<span class="pav">'+esc(ini)+'</span><span class="ptx"><b>'+esc(nm)+'</b><small>'+esc(acct.email)+'</small><small id="syncst">'+esc(tr(syncText()))+'</small><em class="pos">🔒 Ende-zu-Ende verschlüsselt</em></span>':SRV?'<span class="pav">DJ</span><span class="ptx"><b>Nur auf diesem Gerät</b><small>Mit einem Konto sind deine Daten auf allen Geräten gleich und verschlüsselt gespeichert.</small><button class="primary" data-act="authOpen">Anmelden oder Konto erstellen</button></span>':'<span class="pav">DJ</span><span class="ptx"><b>Nur auf diesem Gerät</b></span>')+'</section>'
+    +(LI?'<div class="form"><button data-act="syncNow">Jetzt synchronisieren</button></div>':'');
+  h+='<div class="sgh">Sicherheit</div><section class="sbox">'+row('lock','c4','Fingerabdruck-Sperre','Beim Öffnen und nach 1 Minute im Hintergrund',swBtn(!!st.lock,'toggleLock','Fingerabdruck-Sperre'))
+    +row('eye','c4','Beträge beim Start verbergen','Für unterwegs, antippen des Auges zeigt sie',swBtn(!!st.hideStart,'toggleHideStart','Beträge beim Start verbergen'))
+    +(LI?row('bell','c4','Mitteilungen','Neue Rechnungen melden, auch wenn die App zu ist',swBtn(pushState(),pushState()?'pushOff':'pushOn','Mitteilungen')):'')+'</section>';
+  h+='<div class="sgh">Bereiche der App</div><section class="sbox">'+row('immo','c3','Immobilien','Mieten, Mieter, Zähler, Modernisierung',swBtn(immoOn(),'toggleImmo','Immobilien'))
+    +row('bank','c3','Kredite','Restschuld, Zins und Tilgung, unter Konten',swBtn(creditOn(),'toggleCredit','Kredite'))
+    +row('globe','c3','Sprache','Language · Jezik','<select id="f-lang" aria-label="Sprache">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel((st.lang||'auto')===v)+'>'+t+'</option>').join('')+'</select>')
+    +row('user','c3','Name im Jahresbericht',esc(st.owner||'Noch nicht eingetragen'),'<span class="chev">›</span>','ownerDlg')+'</section>';
+  h+='<div class="sgh">Backup</div><section class="sbox">'+row('cloud','c2','Letztes Backup',st.lastBackup?dfmt(st.lastBackup)+' · '+(daysTo(st.lastBackup)===0?'heute':'vor '+(-daysTo(st.lastBackup))+(daysTo(st.lastBackup)===-1?' Tag':' Tagen')):(LI?'Deine Daten werden verschlüsselt synchronisiert. Ein Backup schadet trotzdem nicht.':'Noch keins. Die Daten liegen nur auf diesem Gerät.'),'')
+    +'<div class="form sbtn"><button data-act="copyBackup">↓ Speichern</button><button data-act="restoreDlg">↑ Einspielen</button></div></section>';
+  if(LI)h+='<button class="logout" data-act="logout">Abmelden</button>';
+  return h}
+function remPage(){return '<div class="h2row remtop"><span class="hint">Eigene Termine und was die App selbst erkennt.</span><button class="primary plus" data-act="addRem" aria-label="Neue Erinnerung">+</button></div>'+remRows()
+  +'<div class="srow solo"><span class="stx"><b>Auf der Übersicht zeigen</b></span>'+swBtn(!(S.settings&&S.settings.remind===false),'toggleRemind','Auf der Übersicht zeigen')+'</div>'}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='upAuszug')upChooser('auszug');else if(a==='upBeleg')upChooser('beleg');
+  else if(a==='upCam'){closeModal();const f=$('#f-receipt');f.value='';f.setAttribute('capture','environment');f.click()}
+  else if(a==='upGal'){closeModal();const f=$('#f-receipt');f.value='';f.removeAttribute('capture');f.click()}
+  else if(a==='editRem')remDlg(b.dataset.id);
+  else if(a==='toggleHideStart'){S.settings=S.settings||{};S.settings.hideStart=!S.settings.hideStart;save();render()}
+  else if(a==='ownerDlg')modal('<h3>Name im Jahresbericht</h3><label>Vor- und Nachname<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'"></label><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveOwner">Speichern</button></div>');
+});
+I18N.push(['Rechnungen','Invoices','Računi'],['Einrichten','Set up','Postavljanje'],['Gmail verbinden','Connect Gmail','Poveži Gmail'],['Mitteilungen erlauben','Allow notifications','Dopusti obavijesti'],['Erlauben','Allow','Dopusti'],['Starten','Start','Pokreni'],['Jetzt prüfen','Check now','Provjeri sada'],['Skript neu erstellen','Create new script','Izradi novu skriptu'],['Mitteilung testen','Test notification','Testiraj obavijest'],['Barcode speichern','Save barcode','Spremi barkod'],['Rechnung ansehen','View invoice','Pogledaj račun'],['Erledigt','Done','Riješeno'],['Schon bezahlt','Already paid','Već plaćeno'],['Keine Rechnung','Not an invoice','Nije račun'],['Skript kopieren','Copy script','Kopiraj skriptu'],['Kontoauszug','Bank statement','Izvod'],['Beleg','Receipt','Račun'],['Kamera','Camera','Kamera'],['Datei suchen','Find file','Traži datoteku'],['Beleg hinzufügen','Add receipt','Dodaj račun'],['Dein Monat','Your month','Tvoj mjesec'],['Deine Wünsche','Your wishes','Tvoje želje'],['Hier sparst du','Where you save','Ovdje štediš'],['Nächstes Ziel','Next goal','Sljedeći cilj'],['Einnahmen','Income','Prihodi'],['Ausgaben','Expenses','Rashodi'],['Bleibt jetzt','Left now','Ostaje sada'],['Mit Sparplan','With savings plan','S planom štednje'],['Überfällig','Overdue','Dospjelo'],['Heute und diese Woche','Today and this week','Danas i ovaj tjedan'],['Später','Later','Kasnije'],['von der App','from the app','iz aplikacije'],['jährlich','yearly','godišnje'],['monatlich','monthly','mjesečno'],['Auf der Übersicht zeigen','Show on overview','Prikaži na pregledu'],['Sicherheit','Security','Sigurnost'],['Bereiche der App','App sections','Dijelovi aplikacije'],['Fingerabdruck-Sperre','Fingerprint lock','Zaključavanje otiskom'],['Beträge beim Start verbergen','Hide amounts on start','Sakrij iznose pri pokretanju'],['Mitteilungen','Notifications','Obavijesti'],['Immobilien','Properties','Nekretnine'],['Kredite','Loans','Krediti'],['Sprache','Language','Jezik'],['Name im Jahresbericht','Name in annual report','Ime u godišnjem izvješću'],['Letztes Backup','Last backup','Zadnja sigurnosna kopija'],['Abmelden','Sign out','Odjava'],['Nur auf diesem Gerät','Only on this device','Samo na ovom uređaju'],['Jetzt synchronisieren','Sync now','Sinkroniziraj sada'],['Gmail verbinden','Connect Gmail','Poveži Gmail']);

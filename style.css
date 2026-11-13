@@ -281,3 +281,93 @@ details.bkset summary{cursor:pointer;color:var(--accent2);font-weight:600;margin
 .xrow>.num{flex:none;white-space:nowrap}
 .xrow.off b,.xrow.off small{color:var(--muted);text-decoration:line-through}
 .xrow.off .num{color:var(--muted)}
+/* Eingangsrechnungen */
+.card.ab{--ac-b:rgba(255,91,46,.5);--ac-bg:rgba(255,91,46,.12);--ac:#ff8a66}
+.bill{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.card .bill{background:var(--bg);border-color:transparent;margin-top:8px}
+.bill.late{border-color:rgba(255,93,108,.55)}.bill.done{opacity:.72}
+.bhead{display:flex;align-items:center;gap:12px}
+.bic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:rgba(255,91,46,.16);color:#ff8a66;flex:none}
+.bic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bill.done .bic{background:var(--good-bg);color:var(--good)}
+.bt2{flex:1;min-width:0;display:flex;flex-direction:column}.bt2 b{overflow-wrap:anywhere}
+.bhead .num{font-weight:700;font-size:1.05rem}.bhead .num.muted{color:var(--muted)}
+.bwhere{font-style:normal;color:#b9a6ff;font-weight:600;display:block}
+.bmeta{display:flex;flex-direction:column;gap:2px}.bmeta small{overflow-wrap:anywhere}
+.bact{margin:0;flex-wrap:wrap;gap:8px}.bact button{padding:9px 12px}
+.bact .primary{display:inline-flex;align-items:center;gap:8px}.bact .primary svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.steps{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.step{display:flex;align-items:center;gap:12px;background:var(--bg);border-radius:12px;padding:12px}
+.step>span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px}
+.sn{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--raised);font-weight:700;flex:none}
+.step.ok .sn{background:var(--good-bg);color:var(--good)}.step em{font-style:normal;color:var(--good);font-weight:700}
+.howto{margin:6px 0 10px;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--ink)}
+textarea.code{width:100%;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--muted);border:1px solid var(--line);border-radius:12px;padding:10px;resize:vertical}
+/* Schalter */
+.sw{width:46px;height:28px;border-radius:99px;padding:0;border:0;background:#3a4256;position:relative;flex:none;transition:background .15s}
+.sw i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .15s}
+.sw.on{background:var(--good)}.sw.on i{left:21px}
+.sw:hover{border:0}
+/* Übersicht: Knöpfe in der Vermögenskarte */
+.hbtn{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.pillb{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:99px;border:1px solid rgba(255,138,77,.45);background:rgba(255,91,46,.12);color:#ffb27a;font-size:.92rem}
+.pillb svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.choose2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+.choose2 button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;border-radius:16px}
+.choose2 svg{width:30px;height:30px;fill:none;stroke:var(--accent2);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* Sparplan */
+.seg button.aggr{display:inline-flex;align-items:center;justify-content:center;gap:6px;color:#ff8a5c}.seg button.aggr.on{color:#ff8a5c}
+.seg button.aggr svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+.goal{display:flex;gap:14px;align-items:center;margin-top:12px;padding:14px;border-radius:16px;border:1px solid rgba(255,176,46,.45);background:linear-gradient(150deg,rgba(255,176,46,.12),var(--surface) 70%)}
+.goal>div{display:flex;flex-direction:column;gap:2px;min-width:0}.goal b{font-size:1.05rem}
+.ring{width:84px;height:84px;flex:none}.ring circle{fill:none;stroke:var(--line);stroke-width:9}.ring .rv{stroke:var(--accent2);stroke-linecap:round}
+.ring text{fill:var(--ink);font-size:15px;font-weight:700}
+.sec{display:flex;align-items:center;gap:10px;margin:18px 2px 8px}.sec b{font-size:1rem}.sec small,.sec button{margin-left:auto}
+.sno{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:.8rem;font-weight:700;flex:none}
+.sno.s1{background:var(--info-bg);color:var(--info)}.sno.s2{background:rgba(255,176,46,.16);color:var(--accent2)}.sno.s3{background:var(--good-bg);color:var(--good)}
+.secbox{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.flow{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--line)}.flow i{display:block;height:100%}
+.flow .fo{background:var(--bad)}.flow .fr{background:#3a4256}.flow .fx{background:var(--good)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.g2>div{display:flex;flex-direction:column}.g2 b{font-size:1.05rem}
+.chip2{font-style:normal;font-size:.75rem;font-weight:700;padding:2px 7px;border-radius:99px;background:var(--good-bg);color:var(--good);white-space:nowrap}
+.secbox .lnk{align-self:flex-start;background:none;border:0;padding:0;color:#ffb27a}
+.wrow{display:flex;flex-direction:column;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--line);position:relative}.wrow:last-child{border-bottom:0;padding-bottom:0}
+.wbar.big{height:8px;max-width:none;margin:0}.wbar.big i{background:var(--accent2)}
+.wfoot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.wact{display:flex;gap:6px}.ic.sm{width:34px;height:34px;padding:0;display:grid;place-items:center}
+.cuts{gap:0;padding-top:4px;padding-bottom:4px}
+.cut{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}.cut:first-child{border-top:0}
+.cic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(255,91,46,.14);color:#ff8a5c;flex:none}
+.cic svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ct2{flex:1;min-width:0;display:flex;flex-direction:column}
+.cut.off .cic{background:var(--idle-bg);color:var(--idle)}.cut.off b{color:var(--muted)}
+/* Erinnerungen */
+.remtop{align-items:center}.remtop .hint{flex:1}
+.plus{width:42px;height:42px;padding:0;font-size:1.5rem;line-height:1;border-radius:12px}
+.rgh{display:flex;align-items:center;gap:8px;font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin:14px 4px 2px}
+.rgh i{width:8px;height:8px;border-radius:50%}
+.rgh.late{color:var(--bad)}.rgh.late i{background:var(--bad)}.rgh.soon{color:var(--accent2)}.rgh.soon i{background:var(--accent2)}.rgh.later{color:var(--muted)}.rgh.later i{background:#3a4256}
+.ritem{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.ritem.late{border-color:rgba(255,93,108,.45)}
+.dblk{width:48px;flex:none;text-align:center;border-radius:10px;padding:5px 0;background:var(--raised);display:flex;flex-direction:column}
+.dblk b{font-size:1.15rem;line-height:1.1}.dblk span{font-size:.7rem;font-weight:700;letter-spacing:.05em}
+.ritem.late .dblk{background:var(--bad-bg);color:#ff8a94}.ritem.soon .dblk{background:rgba(255,176,46,.16);color:var(--accent2)}
+.rt{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:none;border:0;padding:0;text-align:left;font-weight:400;color:var(--ink)}
+.rt b{font-weight:700}.ritem.late .rt small{color:#ff8a94}
+.rchip{font-style:normal;font-size:.72rem;padding:2px 8px;border-radius:99px;background:var(--raised);color:var(--muted);margin-top:2px}
+.rchip.app{background:rgba(167,139,250,.16);color:#b9a6ff}
+.okb{width:38px;height:38px;border-radius:50%;padding:0;flex:none;display:grid;place-items:center;border:1.5px solid #3a4256;background:transparent;color:var(--muted);font-size:1rem}
+.okb:hover{border-color:var(--good);color:var(--good)}.okb.go{font-size:1.3rem}
+/* Konto & Sicherheit */
+.prof{display:flex;gap:14px;align-items:center;padding:16px;border-radius:18px;border:1px solid rgba(255,138,77,.45);background:linear-gradient(150deg,rgba(255,91,46,.13),var(--surface) 70%)}
+.pav{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:rgba(255,176,46,.18);color:var(--accent2);font-weight:700;font-size:1.1rem;flex:none}
+.ptx{display:flex;flex-direction:column;gap:2px;min-width:0}.ptx b{font-size:1.05rem;overflow-wrap:anywhere}.ptx em{font-style:normal;font-size:.82rem;font-weight:600;margin-top:2px}.ptx button{margin-top:8px;align-self:flex-start}
+.sgh{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:16px 4px 0}
+.sbox{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.srow{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line);min-height:58px}.srow:first-child{border-top:0}
+.srow[role=button]{cursor:pointer}.srow[role=button]:active{background:var(--raised)}
+.srow.solo{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin-top:14px}
+.stx{flex:1;min-width:0;display:flex;flex-direction:column}.stx b{font-weight:600}
+.srow select{width:auto;max-width:140px;padding:8px 10px}
+.sbtn{padding:0 14px 14px;margin:0}.sbtn button{flex:1}
+.logout{background:transparent;border:0;color:var(--bad);margin:10px auto 0;display:block}
