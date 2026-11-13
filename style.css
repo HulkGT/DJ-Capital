@@ -275,3 +275,9 @@ details.bkset summary{cursor:pointer;color:var(--accent2);font-weight:600;margin
 .blg{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:.72rem;flex:none;letter-spacing:.02em}
 .kline{display:flex;justify-content:space-between;align-items:baseline;padding:4px 2px 2px;color:var(--muted)}.kline b{color:var(--ink);font-size:1.15rem}
 .item.bk .it{flex:1;text-align:left;align-items:flex-start}
+.xrow{display:flex;flex-direction:row;align-items:center;gap:12px;cursor:pointer;font-size:1rem;color:var(--text)}
+.xrow input{width:24px;height:24px;min-height:0;padding:0;flex:none;margin:0;accent-color:var(--accent)}
+.xrow>span:nth-child(2){flex:1;min-width:0;display:flex;flex-direction:column}
+.xrow>.num{flex:none;white-space:nowrap}
+.xrow.off b,.xrow.off small{color:var(--muted);text-decoration:line-through}
+.xrow.off .num{color:var(--muted)}
