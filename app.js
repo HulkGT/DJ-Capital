@@ -1938,8 +1938,13 @@ async function billCodeImg(b){let u=null;try{u=await idbGet(KV,'bc:'+b.id)}catch
   return u}
 async function billSaveCode(b){const u=await billCodeImg(b);if(!u){toast('Auf dieser Rechnung wurde kein Barcode gefunden.');return false}
   const bl=await (await fetch(u)).blob();dlBlob(bl,'Racun_'+slug(b.payee)+(b.amount?'_'+String(b.amount.toFixed(2)).replace('.',',')+'EUR':'')+'.png');return true}
-async function billPay(id){const b=bills().find(x=>x.id===id);if(!b)return;const ok=await billSaveCode(b);b.payAt=Date.now();save();
-  if(ok)toast('Barcode liegt in der Galerie (Album Download). mojaRBA öffnet sich …');setTimeout(rbaOpen,ok?1400:200)}
+async function billPay(id){const b=bills().find(x=>x.id===id);if(!b)return;const u=await billCodeImg(b);b.payAt=Date.now();save();
+  if(!u){toast('Auf dieser Rechnung wurde kein Barcode gefunden.');return}
+  const name='Racun_'+slug(b.payee)+(b.amount?'_'+String(b.amount.toFixed(2)).replace('.',',')+'EUR':'')+'.png';
+  const bl=await (await fetch(u)).blob();dlBlob(bl,name);
+  const file=new File([bl],name,{type:'image/png'}),data={files:[file]};
+  if(navigator.canShare&&navigator.canShare(data)){try{await navigator.share(data);toast('In mojaRBA im Scanner auf das Galerie-Symbol tippen und den Barcode wählen.');return}catch(e){if(e&&e.name==='AbortError')return}}
+  toast('Barcode liegt in der Galerie (Album Download). mojaRBA öffnet sich …');setTimeout(rbaOpen,1400)}
 async function billView(id){const b=bills().find(x=>x.id===id);if(!b||!b.files||!b.files[0])return;const f=b.files[0];const w=window.open('','_blank');
   try{const bytes=await mailFile(f.fid);const url=URL.createObjectURL(new Blob([bytes],{type:f.type}));if(w)w.location.href=url;else{const a=document.createElement('a');a.href=url;a.download=f.name;a.click()}setTimeout(()=>URL.revokeObjectURL(url),120000)}
   catch(e){if(w)w.close();toast('Die Rechnung konnte nicht geladen werden.')}}
