@@ -302,7 +302,7 @@ details.bkset summary{cursor:pointer;color:var(--accent2);font-weight:600;margin
 .sn{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--raised);font-weight:700;flex:none}
 .step.ok .sn{background:var(--good-bg);color:var(--good)}.step em{font-style:normal;color:var(--good);font-weight:700}
 .howto{margin:6px 0 10px;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--ink)}
-textarea.code{width:100%;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--muted);border:1px solid var(--line);border-radius:12px;padding:10px;resize:vertical}
+textarea.code{width:100%;min-height:150px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--muted);border:1px solid var(--line);border-radius:12px;padding:10px;resize:vertical}
 /* Schalter */
 .sw{width:46px;height:28px;border-radius:99px;padding:0;border:0;background:#3a4256;position:relative;flex:none;transition:background .15s}
 .sw i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .15s}
@@ -371,3 +371,4 @@ textarea.code{width:100%;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;bac
 .srow select{width:auto;max-width:140px;padding:8px 10px}
 .sbtn{padding:0 14px 14px;margin:0}.sbtn button{flex:1}
 .logout{background:transparent;border:0;color:var(--bad);margin:10px auto 0;display:block}
+.howto code{font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--bg);padding:2px 5px;border-radius:6px;overflow-wrap:anywhere}

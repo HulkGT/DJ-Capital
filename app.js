@@ -1541,7 +1541,7 @@ async function bkFetch(manual){if(bkBusy||!bkReady())return;const b=bk();if(!b.c
   }finally{bkBusy=false}}
 function bankAfterBoot(){if(BK_CB&&!bankAfterBoot.done){bankAfterBoot.done=true;bkCallback(BK_CB);return}
   if(bankAfterBoot.done)return;bankAfterBoot.done=true;
-  bkAuto();if(typeof mailPull==='function')setTimeout(()=>mailPull(),1500)}
+  bkAuto();if(typeof mailPull==='function')setTimeout(()=>{mailPull();invSync()},1500)}
 async function bkAuto(){if(!bkReady()||!bk().conns.length)return;
   if(loggedIn()){await bkSchedPush(false);await bkInbox();
     if(bkSched.active&&bkSched.last_run&&Date.now()-bkSched.last_run<16*3600e3)return}
@@ -1966,7 +1966,8 @@ function billPage(){if(!SRV)return '<p class="hint">Für Rechnungen aus Gmail br
   h+=open.length?'<h3 class="gt lh">Offen · '+open.length+'</h3>'+open.map(b=>billRow(b)).join(''):(mailOn()?'<div class="empty">Keine offenen Rechnungen. Neue Rechnungen aus Gmail erscheinen hier von selbst.</div>':'');
   if(done.length)h+='<h3 class="gt lh">Erledigt</h3>'+done.map(b=>billRow(b,true)).join('');
   if(mailOn())h+='<section class="group"><div class="form"><button data-act="mailPull">Jetzt prüfen</button><button data-act="mailSetup">Skript neu erstellen</button>'+(pushOk?'<button data-act="pushTest">Mitteilung testen</button>':'')+'</div><p class="hint">Das Skript in deinem Google-Konto prüft jede Stunde. Die App hakt Rechnungen von selbst ab, sobald die Zahlung im Bankabruf auftaucht.</p></section>';
-  return h}
+  if(invOn()&&invList===null)setTimeout(()=>invSync().then(()=>{if(mehrSub()==='bills')render()}),50);
+  return h+invSection()}
 function scriptText(u){return [
 '// DJ Capital – Rechnungen aus Gmail',
 '// Läuft in deinem eigenen Google-Konto. Schickt neue Rechnungen verschlüsselt an deine App.',
@@ -2098,3 +2099,35 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(
   else if(a==='ownerDlg')modal('<h3>Name im Jahresbericht</h3><label>Vor- und Nachname<input id="f-owner" value="'+esc((S.settings&&S.settings.owner)||'')+'"></label><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveOwner">Speichern</button></div>');
 });
 I18N.push(['Rechnungen','Invoices','Računi'],['Einrichten','Set up','Postavljanje'],['Gmail verbinden','Connect Gmail','Poveži Gmail'],['Mitteilungen erlauben','Allow notifications','Dopusti obavijesti'],['Erlauben','Allow','Dopusti'],['Starten','Start','Pokreni'],['Jetzt prüfen','Check now','Provjeri sada'],['Skript neu erstellen','Create new script','Izradi novu skriptu'],['Mitteilung testen','Test notification','Testiraj obavijest'],['Barcode speichern','Save barcode','Spremi barkod'],['Rechnung ansehen','View invoice','Pogledaj račun'],['Erledigt','Done','Riješeno'],['Schon bezahlt','Already paid','Već plaćeno'],['Keine Rechnung','Not an invoice','Nije račun'],['Skript kopieren','Copy script','Kopiraj skriptu'],['Kontoauszug','Bank statement','Izvod'],['Beleg','Receipt','Račun'],['Kamera','Camera','Kamera'],['Datei suchen','Find file','Traži datoteku'],['Beleg hinzufügen','Add receipt','Dodaj račun'],['Dein Monat','Your month','Tvoj mjesec'],['Deine Wünsche','Your wishes','Tvoje želje'],['Hier sparst du','Where you save','Ovdje štediš'],['Nächstes Ziel','Next goal','Sljedeći cilj'],['Einnahmen','Income','Prihodi'],['Ausgaben','Expenses','Rashodi'],['Bleibt jetzt','Left now','Ostaje sada'],['Mit Sparplan','With savings plan','S planom štednje'],['Überfällig','Overdue','Dospjelo'],['Heute und diese Woche','Today and this week','Danas i ovaj tjedan'],['Später','Later','Kasnije'],['von der App','from the app','iz aplikacije'],['jährlich','yearly','godišnje'],['monatlich','monthly','mjesečno'],['Auf der Übersicht zeigen','Show on overview','Prikaži na pregledu'],['Sicherheit','Security','Sigurnost'],['Bereiche der App','App sections','Dijelovi aplikacije'],['Fingerabdruck-Sperre','Fingerprint lock','Zaključavanje otiskom'],['Beträge beim Start verbergen','Hide amounts on start','Sakrij iznose pri pokretanju'],['Mitteilungen','Notifications','Obavijesti'],['Immobilien','Properties','Nekretnine'],['Kredite','Loans','Krediti'],['Sprache','Language','Jezik'],['Name im Jahresbericht','Name in annual report','Ime u godišnjem izvješću'],['Letztes Backup','Last backup','Zadnja sigurnosna kopija'],['Abmelden','Sign out','Odjava'],['Nur auf diesem Gerät','Only on this device','Samo na ovom uređaju'],['Jetzt synchronisieren','Sync now','Sinkroniziraj sada'],['Gmail verbinden','Connect Gmail','Poveži Gmail']);
+/* ---------- Ausgangsrechnungen → Excel (Power Query) ---------- */
+var INV_KEY=/(?:^|[^A-Za-z])(?:RN|RE|RG|Rg|Re|Rech(?:nung)?(?:s?(?:nummer|nr))?|Re\.?\s?-?\s?Nr|Račun|Racun|Rn)\.?\s*(?:Nr\.?|br\.?)?\s*[:#.-]?\s*((?:\d{3,7}(?:\s*(?:,|;|\/|&|\+|und|i|u\.)\s*)?)+)/gi;
+var invList=null,invBusy=false;
+function invNumbers(text){const out=new Set();const t=String(text||'').replace(/\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g,' ').replace(/\b(19|20)\d\d-\d{1,2}(-\d{1,2})?\b/g,' ');let m;INV_KEY.lastIndex=0;
+  while((m=INV_KEY.exec(t)))for(const n of m[1].match(/\d{3,7}/g)||[])out.add(String(+n));return [...out]}
+function invOn(){return !!(S.inv&&S.inv.on)}
+function invFound(){const o={};S.txs.filter(t=>t.amount>0&&t.type!=='ignore').forEach(t=>{const L=invNumbers((t.purpose||'')+' '+(t.name||''));L.forEach(nr=>{if(!o[nr]||o[nr].date>t.date)o[nr]={nr,date:t.date,amount:L.length===1?t.amount:0}})});return o}
+async function invSync(force){if(invBusy||!loggedIn()||!invOn())return;invBusy=true;
+  try{const F=invFound(),sent=new Set(S.inv.sent||[]);const items=Object.values(F).filter(x=>force||!sent.has(x.nr+'|'+x.date));
+    if(items.length){await bkApi('/inv/add',{method:'POST',body:JSON.stringify({items})});S.inv.sent=[...new Set([...(S.inv.sent||[]),...items.map(x=>x.nr+'|'+x.date)])].slice(-2000);save()}
+    const j=await bkApi('/inv/list');invList=j.items||[];if(!j.active){S.inv.on=false;save()}}
+  catch(e){}finally{invBusy=false}}
+function invMcode(u){return 'let\n    Quelle = Csv.Document(Web.Contents("'+u+'"), [Delimiter=";", Encoding=65001, QuoteStyle=QuoteStyle.Csv]),\n    Kopf = Table.PromoteHeaders(Quelle, [PromoteAllScalars=true]),\n    Typen = Table.TransformColumnTypes(Kopf, {{"Nr", Int64.Type}, {"Datum", type date}, {"Betrag", type number}}, "en-US")\nin\n    Typen'}
+function invSection(){if(!loggedIn())return '';
+  if(!invOn())return '<h3 class="gt lh">Ausgangsrechnungen · Excel</h3><section class="group"><p class="hint">Die App erkennt in Zahlungseingängen Rechnungsnummern wie „RN 1302". Deine Excel-Rechnungsliste holt sich die bezahlten Nummern beim Öffnen selbst und hakt sie ab. Gespeichert werden nur Nummer, Zahldatum und Betrag.</p><button class="primary" data-act="invSetup">Einrichten</button></section>';
+  const L=invList||[];
+  return '<h3 class="gt lh">Ausgangsrechnungen · Excel</h3><section class="group"><p class="hint">'+(invList?L.length+' bezahlte Rechnungen erkannt. Excel holt die Liste beim Öffnen.':'Wird geladen …')+'</p>'
+    +(L.length?'<div class="elist kvs">'+L.slice(0,12).map(x=>'<div class="erow"><span><b>RN '+esc(x.nr)+'</b><small>bezahlt am '+dfmt(x.date)+(x.src==='bank'?' · vom Bankabruf':'')+'</small></span><span class="num pos">'+(x.amount?eur(x.amount):'')+'</span></div>').join('')+'</div>':'')
+    +'<div class="form"><button data-act="invSyncNow">Jetzt abgleichen</button><button data-act="invSetup">Neuen Excel-Link</button><button data-act="invOff">Ausschalten</button></div></section>'}
+async function invSetup(){let j;try{j=await bkApi('/inv/setup',{method:'POST'})}catch(e){toast('Der Server ist nicht erreichbar. Ist der neue Worker eingespielt?');return}
+  S.inv=Object.assign(S.inv||{},{on:true,sent:[]});save();invSync(true).then(render);const m=invMcode(j.url);
+  modal('<div class="mhead"><div><h3>Excel verbinden</h3><small>Einmalig in deiner Rechnungsliste</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
+    +'<ol class="howto"><li>In Excel: <b>Daten → Daten abrufen → Aus anderen Quellen → Leere Abfrage</b>.</li><li>In Power Query: <b>Start → Erweiterter Editor</b>, alles ersetzen durch den Code unten, <b>Fertig</b>. Die Abfrage <b>Zahlungen</b> nennen.</li><li>Fragt Excel nach dem Zugriff: <b>Anonym → Verbinden</b>.</li><li><b>Schließen &amp; laden</b>. Es entsteht ein Blatt mit der Tabelle <b>Zahlungen</b> (Nr, Datum, Betrag).</li><li>Rechtsklick auf die Tabelle → <b>Tabelle → Eigenschaften externer Daten</b> → Häkchen bei <b>Daten beim Öffnen der Datei aktualisieren</b> (und gern <b>alle 60 Minuten</b>).</li><li>Im Blatt 2026 eine Spalte <b>Bezahlt am</b> anlegen, in der ersten Rechnungszeile (bei 1268): <code>=WENNFEHLER(XVERWEIS(--A5;Zahlungen[Nr];Zahlungen[Datum]);"")</code> und nach unten ziehen. A5 an deine Zeile anpassen.</li><li>Für die Spalte Bezahlt: <code>=E5&lt;&gt;""</code>, oder wenn du bar Bezahltes weiter von Hand abhaken willst, eine Spalte „Hand" dazu und <code>=ODER(E5&lt;&gt;"";F5&lt;&gt;"")</code>.</li></ol>'
+    +'<textarea id="f-mcode" class="code" readonly rows="7">'+esc(m)+'</textarea><div class="mact"><button data-act="close">Schließen</button><button class="primary" data-act="copyMcode">Code kopieren</button></div>'
+    +'<p class="hint">Der Link enthält einen geheimen Schlüssel nur für diese Liste. „Neuen Excel-Link" macht den alten ungültig; dann den Code in Excel einmal austauschen.</p>')}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='invSetup')invSetup();
+  else if(a==='invSyncNow')invSync(true).then(()=>{render();toast('Abgeglichen.')});
+  else if(a==='invOff')ask('Excel-Liste ausschalten? Die gespeicherte Liste beim Server wird gelöscht, Excel bekommt keine neuen Haken mehr.','Ausschalten',async()=>{try{await bkApi('/inv/setup',{method:'DELETE'})}catch(x){}S.inv={on:false};invList=[];save();render()});
+  else if(a==='copyMcode'){const t=$('#f-mcode');(navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>toast('Code kopiert.')).catch(()=>{t.select();document.execCommand('copy');toast('Code kopiert.')})}
+});
+I18N.push(['Ausgangsrechnungen · Excel','Outgoing invoices · Excel','Izlazni računi · Excel'],['Jetzt abgleichen','Sync now','Uskladi sada'],['Neuen Excel-Link','New Excel link','Nova Excel poveznica'],['Ausschalten','Turn off','Isključi'],['Excel verbinden','Connect Excel','Poveži Excel'],['Code kopieren','Copy code','Kopiraj kod']);
