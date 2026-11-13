@@ -347,14 +347,15 @@ function loans(){const m={};S.txs.filter(t=>t.type==='loan').forEach(t=>{const p
 /* ---------- Ampel & Empfehlungen ---------- */
 function last3(){const cm=monthOf(todayISO()),ms=[1,2,3].map(i=>addMonth(cm,-i));const l=S.txs.filter(t=>ms.includes(t.type==='rent'?(t.forMonth||monthOf(t.date)):monthOf(t.date)));
   const inc=l.filter(isInc).reduce((s,t)=>s+t.amount,0)/3,out=-l.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0)/3;return {l,inc,out,ms}}
-function ampel(){const a=last3();if(!a.inc&&!a.out)return {c:'grey',t:'Noch zu wenig Daten',d:'Lade Kontoauszüge der letzten Monate hoch, dann zeigt die Ampel deinen Stand.',a};
+function ampel(){const b=wishBase(),a={inc:b.inc,out:b.out};if(!b.has||(!a.inc&&!a.out))return {c:'grey',t:'Noch zu wenig Daten',d:'Lade Kontoauszüge der letzten Monate hoch, dann zeigt die Ampel deinen Stand.',a};
+  if(!a.inc)return {c:'grey',t:'Keine regelmäßige Einnahme erkannt',d:'Tippe auf „Rechnung ansehen“ und wähle, welche Einnahmen jeden Monat kommen.',a};
   const r=a.inc?(a.inc-a.out)/a.inc:-1;
   if(r>=0.4)return {c:'green',t:'Läuft gut',d:'Du gibst im Schnitt '+Math.round((1-r)*100)+' % deiner Einnahmen aus. Es bleiben etwa '+eur(Math.round(a.inc-a.out))+' im Monat übrig.',a};
   if(r>=0)return {c:'yellow',t:'Knapp',d:'Es bleiben nur etwa '+eur(Math.round(a.inc-a.out))+' im Monat übrig ('+Math.round(r*100)+' % der Einnahmen). Grün gibt es ab 40 %.',a};
   return {c:'red',t:'Achtung',d:'Du gibst im Schnitt '+eur(Math.round(a.out-a.inc))+' mehr aus, als reinkommt.',a};
 }
 function ampelCard(){const x=ampel();
-  return '<section class="card ampel '+x.c+'"><div class="alight" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="atext"><div class="hl">Dein Stand · letzte 3 Monate</div><strong>'+x.t+'</strong><p>'+esc(x.d)+'</p><div class="form"><button data-act="wishPlan">Wo kann ich sparen?</button><button data-act="tipsCash">Was tun mit dem Geld?</button></div></div></section>';
+  return '<section class="card ampel '+x.c+'"><div class="alight" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="atext"><div class="hl">Dein Stand · üblicher Monat</div><strong>'+x.t+'</strong><p>'+esc(x.d)+' <button class="lnk" data-act="wishRate">Rechnung ansehen</button></p><div class="form"><button data-act="wishPlan">Wo kann ich sparen?</button><button data-act="tipsCash">Was tun mit dem Geld?</button></div></div></section>';
 }
 const mkey=t=>nrm(t.name||'').replace(/^paypal: /,'').replace(/[^a-z ]/g,' ').trim().split(/\s+/).slice(0,2).join(' ');
 function saveTips(){
@@ -400,24 +401,31 @@ function wishBase(){const cm=monthOf(todayISO()),ms=[1,2,3,4,5,6].map(i=>addMont
   const all=S.txs.filter(t=>ms.includes(mOf(t))&&(isInc(t)||t.type==='expense')&&!isOwnTransfer(t));
   const have=ms.filter(m=>all.some(t=>mOf(t)===m)),nM=have.length;
   const med=v=>{if(!v.length)return 0;const s=v.slice().sort((x,y)=>x-y),h=s.length>>1;return s.length%2?s[h]:(s[h-1]+s[h])/2};
-  const srcKey=t=>t.type==='rent'?'r:'+(t.unitId||''):'i:'+(t.iban||mkey(t)||nrm(t.category||''));
+  const nm=t=>{const n=payeeKey(String(t.name||'').replace(/^PayPal: /i,''));return n&&n!=='von hand'&&n!=='–'&&n!=='-'?n:''};
+  const srcKey=t=>t.type==='rent'?'r:'+(t.unitId||''):'i:'+(nm(t)?'n:'+nm(t):t.iban?'b:'+t.iban:(learnKey(t)||'c:'+nrm(t.category||'')));
   const g={};all.filter(isInc).forEach(t=>{const k=srcKey(t);const o=g[k]=g[k]||{k,name:t.type==='rent'?('Miete '+((unitOf(t.unitId)&&unitLabel(unitOf(t.unitId)))||'')):(t.name||t.category||'Einnahme'),cat:t.type==='rent'?'Miete':(t.category||''),pm:{},l:[]};o.pm[mOf(t)]=(o.pm[mOf(t)]||0)+t.amount;o.l.push(t)});
-  const ov=S.wishInc||{},need=nM>=6?4:nM>=4?3:Math.max(2,nM);
-  const src=Object.values(g).map(o=>{const n=Object.keys(o.pm).length,amt=med(Object.values(o.pm));const auto=n>=need;const on=ov[o.k]!=null?!!ov[o.k]:auto;return Object.assign(o,{n,amt,auto,on})}).sort((p,q)=>(q.on-p.on)||q.amt-p.amt);
+  const ov=S.wishInc||{};const accFirst={};S.txs.forEach(t=>{const k=t.accountId||'';const m=monthOf(t.date);if(!accFirst[k]||m<accFirst[k])accFirst[k]=m});
+  const src=Object.values(g).map(o=>{const n=Object.keys(o.pm).length,amt=med(Object.values(o.pm));
+    const first=o.l.reduce((s,t)=>{const f=t.type==='rent'?ms[5]:(accFirst[t.accountId||'']||ms[5]);return f<s?f:s},'9999-99');const el=Math.max(1,ms.filter(m=>m>=first&&have.includes(m)).length),need=el>=6?4:el>=4?3:Math.max(2,el);o.el=el;const auto=n>=need;const on=ov[o.k]!=null?!!ov[o.k]:auto;return Object.assign(o,{n,amt,auto,on})}).sort((p,q)=>(q.on-p.on)||q.amt-p.amt);
   const inc=src.filter(s=>s.on).reduce((s,o)=>s+o.amt,0);
   const out=med(have.map(m=>-all.filter(t=>t.type==='expense'&&mOf(t)===m).reduce((s,t)=>s+t.amount,0)));
   const auto=inc-out,man=S.settings&&S.settings.saveRate,manual=man!=null&&man!=='';
   return {src,nM,inc,out,auto,manual,rate:manual?+man:auto,has:nM>0}}
-function wishRateDlg(){const b=wishBase();const row=s=>'<div class="erow"><span><b>'+esc(s.name)+'</b><small>'+(s.cat?esc(s.cat)+' · ':'')+'in '+s.n+' von '+b.nM+' Monaten'+(s.on?'':' · zählt nicht mit')+'</small></span><span class="form" style="margin:0;align-items:center"><span class="num '+(s.on?'pos':'')+'">'+eur(Math.round(s.amt))+'</span><button class="small'+(s.on?' primary':'')+'" data-act="wishInc" data-k="'+esc(s.k)+'" data-v="'+(s.on?0:1)+'">'+(s.on?'Zählt':'Zählt nicht')+'</button></span></div>';
+function wishRateDlg(){const b=wishBase();const row=s=>'<div class="erow"><span><button class="lnk" data-act="wishSrc" data-k="'+esc(s.k)+'">'+esc(s.name)+' ›</button><small>'+(s.cat?esc(s.cat)+' · ':'')+s.l.length+(s.l.length===1?' Buchung':' Buchungen')+' in '+s.n+' von '+s.el+(s.el===1?' Monat':' Monaten')+'</small></span><span class="form" style="margin:0;align-items:center"><span class="num '+(s.on?'pos':'')+'">'+eur(Math.round(s.amt))+'</span><button class="small" data-act="wishInc" data-k="'+esc(s.k)+'" data-v="'+(s.on?0:1)+'">'+(s.on?'Rausnehmen':'Mitzählen')+'</button></span></div>';
   const reg=b.src.filter(s=>s.on),one=b.src.filter(s=>!s.on);
   modal('<div class="mhead"><div><h3>Was bleibt im Monat übrig?</h3><small>Regelmäßige Einnahmen minus übliche Ausgaben</small></div><button class="ic" data-act="wishPlan" aria-label="Zurück">×</button></div>'
-    +'<h3 class="gt lh">Regelmäßige Einnahmen · '+eur(Math.round(b.inc))+' im Monat</h3>'+(reg.length?'<div class="elist kvs">'+reg.map(row).join('')+'</div>':'<p class="hint">Die App hat noch keine regelmäßige Einnahme erkannt. Tippe unten bei deinem Gehalt auf „Zählt nicht“, um es mitzurechnen.</p>')
+    +'<h3 class="gt lh">Regelmäßige Einnahmen · '+eur(Math.round(b.inc))+' im Monat</h3>'+(reg.length?'<div class="elist kvs">'+reg.map(row).join('')+'</div>':'<p class="hint">Die App hat noch keine regelmäßige Einnahme erkannt. Tippe unten bei deinem Gehalt auf „Mitzählen“.</p>')
     +(one.length?'<h3 class="gt lh">Einmalig oder unregelmäßig · zählt nicht mit</h3><div class="elist kvs">'+one.map(row).join('')+'</div>':'')
-    +'<p class="hint">Als regelmäßig gilt, was in den meisten der letzten sechs Monate vom selben Absender kam, zum Beispiel Gehalt oder Miete. Gerechnet wird mit dem üblichen Monatsbetrag. Mit dem Knopf rechts änderst du das selbst.</p>'
+    +'<p class="hint">Als regelmäßig gilt, was in den meisten Monaten vom selben Absender kam, zum Beispiel Gehalt oder Miete. Gezählt werden nur Monate, für die das Konto schon Daten hat. Gerechnet wird mit dem üblichen Monatsbetrag. Tippe auf einen Namen, um die einzelnen Buchungen zu sehen. Mit dem Knopf rechts änderst du, was zählt.</p>'
     +'<div class="erow"><span><b>Übliche Ausgaben</b><small>mittlerer Monat der letzten sechs Monate</small></span><span class="num neg">−'+eur(Math.round(b.out))+'</span></div>'
     +'<div class="erow"><span><b>Bleibt im Monat</b></span><span class="num">'+eur(Math.round(b.auto))+'</span></div>'
     +'<label>Oder eigener Betrag pro Monat (€)<input id="f-wr" inputmode="decimal" value="'+(b.manual?String(b.rate).replace('.',','):'')+'" placeholder="leer = automatisch"></label>'
-    +'<div class="mact"><button data-act="wishPlan">Zurück</button><button class="primary" data-act="wishRateSave">Speichern</button></div>')}
+    +'<div class="mact"><button data-act="wishPlan">Zurück</button><button class="primary" data-act="wishRateSave">Speichern</button></div>');if(document.activeElement&&document.activeElement.id==='f-wr')document.activeElement.blur();const mb=$('#modal .mbox');if(mb)mb.scrollTop=0;$('#modal').scrollTop=0}
+function wishSrcDlg(k){const b=wishBase(),s=b.src.find(x=>x.k===k);if(!s){wishRateDlg();return}const mOf=t=>t.type==='rent'?(t.forMonth||monthOf(t.date)):monthOf(t.date);
+  const months=Object.keys(s.pm).sort().reverse();
+  modal('<div class="mhead"><div><h3>'+esc(s.name)+'</h3><small>'+s.l.length+(s.l.length===1?' Buchung':' Buchungen')+' in '+s.n+' von '+s.el+(s.el===1?' Monat':' Monaten')+' · üblich '+eur(Math.round(s.amt))+' im Monat</small></div><button class="ic" data-act="wishRate" aria-label="Zurück">×</button></div>'
+    +'<p class="hint">'+(s.on?'Zählt als regelmäßige Einnahme mit.':'Zählt nicht mit.')+(s.auto!==s.on?' Von dir so eingestellt.':'')+'</p><div class="form"><button class="primary" data-act="wishInc" data-k="'+esc(s.k)+'" data-v="'+(s.on?0:1)+'" data-back="src">'+(s.on?'Rausnehmen':'Mitzählen')+'</button><button data-act="wishRate">Zurück</button></div>'
+    +months.map(m=>'<h3 class="gt lh">'+esc(monthLabel(m))+' · '+eur(Math.round(s.pm[m]*100)/100)+'</h3><div class="elist kvs">'+s.l.filter(t=>mOf(t)===m).sort((x,y)=>y.date.localeCompare(x.date)).map(t=>'<div class="erow"><span><b>'+esc(t.name||t.category||'–')+'</b><small>'+dfmt(t.date)+(accOf(t.accountId)?' · '+esc(accOf(t.accountId).name):'')+(t.category?' · '+esc(t.category):'')+(t.purpose?'<br>'+esc(t.purpose):'')+'</small></span><span class="num pos">'+eur(t.amount)+'</span></div>').join('')+'</div>').join(''))}
 function wishCalc(mode){const a=last3(),keep=S.wishKeep||[];const ex=a.l.filter(t=>t.type==='expense'&&!propOf(t.propertyId)),g={};
   ex.forEach(t=>{const c=t.category||'Ohne Kategorie';(g[c]=g[c]||[]).push(t)});
   const rows=[];Object.entries(g).forEach(([c,l])=>{const avg=-l.reduce((s,t)=>s+t.amount,0)/3;if(avg<5)return;const fix=SAVE_FIX.test(c),kept=keep.includes(c);
@@ -1126,7 +1134,8 @@ document.addEventListener('click',e=>{
   case 'tipsSave':saveTips();return;
   case 'wishPlan':wishPlanDlg();return;
   case 'wishRate':wishRateDlg();return;
-  case 'wishInc':{S.wishInc=S.wishInc||{};S.wishInc[b.dataset.k]=b.dataset.v==='1';save();render();wishRateDlg();return}
+  case 'wishInc':{S.wishInc=S.wishInc||{};S.wishInc[b.dataset.k]=b.dataset.v==='1';save();render();if(b.dataset.back==='src')wishSrcDlg(b.dataset.k);else wishRateDlg();return}
+  case 'wishSrc':wishSrcDlg(b.dataset.k);return;
   case 'wishRateSave':{const v=$('#f-wr').value.trim();S.settings=S.settings||{};if(v==='')delete S.settings.saveRate;else{const n=parseDE(v);if(isNaN(n)){toast('Bitte einen gültigen Betrag eingeben.');return}S.settings.saveRate=n}save();render();wishPlanDlg();return}
   case 'wishAdd':wishDlg();return;case 'wishEdit':wishDlg(id);return;
   case 'wishMode':S.settings=S.settings||{};S.settings.saveMode=b.dataset.v;save();render();wishPlanDlg();return;
@@ -1845,3 +1854,5 @@ I18N.push(['Kredite','Loans','Krediti'],['+ Kredit','+ Loan','+ Kredit'],['Neuer
  ['+ Verliehen','+ Lent','+ Posuđeno'],['Geld verliehen','Money lent','Posuđen novac'],['Rückzahlung eintragen','Enter repayment','Unesi povrat'],['Weiter verliehen','Lent more','Još posuđeno'],['Person','Person','Osoba'],['Verliehen','Lent','Posuđeno'],['Zurückbekommen','Received back','Vraćeno'],['Alles zurückgezahlt.','Everything repaid.','Sve je vraćeno.'],
  ['Hast du jemandem Geld geliehen? Trag es hier ein, auch Bargeld. Die App merkt sich, was noch offen ist.','Have you lent someone money? Enter it here, cash too. The app remembers what is still open.','Jesi li nekome posudio novac? Upiši ovdje, i gotovinu. Aplikacija pamti što je još otvoreno.']);
 PREFIX.push(['Zinsbindung endet: ','Fixed rate ends: ','Fiksna kamata istječe: '],['Schuldet dir noch ','Still owes you ','Još ti duguje '],['Du schuldest ','You owe ','Duguješ ']);
+I18N.push(['Mitzählen','Count it','Uračunaj'],['Rausnehmen','Leave out','Izuzmi'],['Zählt als regelmäßige Einnahme mit.','Counts as regular income.','Računa se kao redoviti prihod.'],['Zählt nicht mit.','Not counted.','Ne računa se.']);
+I18N.push(['Dein Stand · üblicher Monat','Your status · typical month','Tvoje stanje · uobičajeni mjesec'],['Rechnung ansehen','View calculation','Pogledaj izračun'],['Keine regelmäßige Einnahme erkannt','No regular income detected','Nije prepoznat redoviti prihod'],['Tippe auf „Rechnung ansehen“ und wähle, welche Einnahmen jeden Monat kommen.','Tap "View calculation" and choose which income arrives every month.','Dodirni „Pogledaj izračun“ i odaberi koji prihodi stižu svaki mjesec.']);
