@@ -530,7 +530,7 @@ function render(){if(locked||authOpen)return;document.body.classList.toggle('hid
   const cur=curTab(),openN=S.txs.filter(t=>t.type==='open').length;
   const nav=TABS.filter(t=>t[0]!=='immo'||immoOn()).map(t=>'<a href="#'+t[0]+'"'+(t[0]===cur?' class="on" aria-current="page"':'')+'>'+ICON[t[2]]+'<span>'+t[1]+'</span>'+(t[0]==='geld'&&openN?'<b class="badge">'+openN+'</b>':'')+'</a>').join('');
   const V={start:vStart,geld:vGeld,immo:vImmo,konten:vKonten,mehr:vMehr};
-  $('#root').innerHTML='<header class="top"><div class="logo" aria-hidden="true"><span>DJ</span></div><div class="brand">My Capital<small>by DJ Capital</small></div><span class="savest" id="savest" aria-live="polite"></span><button class="ic eye'+(ui.hide?' on':'')+'" data-act="hide" aria-pressed="'+(ui.hide?'true':'false')+'" aria-label="'+(ui.hide?'Beträge zeigen':'Beträge verstecken')+'" title="'+(ui.hide?'Beträge zeigen':'Beträge verstecken')+'">'+(ui.hide?'<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 6.1A9.9 9.9 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.7 3.3M6.2 7.6A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 3.9-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>':'<svg viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="3"/></svg>')+'</button></header><main class="stack">'+V[cur]()+'</main><nav class="bar" aria-label="Bereiche">'+nav+'</nav><input type="file" id="f-file" accept=".csv,.txt,.pdf,text/csv,application/pdf" hidden><input type="file" id="f-receipt" accept="image/*" capture="environment" hidden>';
+  $('#root').innerHTML='<header class="top"><div class="logo" aria-hidden="true"><span>DJ</span></div><div class="brand">My Capital<small>by DJ Capital</small></div><span class="savest" id="savest" aria-live="polite"></span><button class="ic eye'+(ui.hide?' on':'')+'" data-act="hide" aria-pressed="'+(ui.hide?'true':'false')+'" aria-label="'+(ui.hide?'Beträge zeigen':'Beträge verstecken')+'" title="'+(ui.hide?'Beträge zeigen':'Beträge verstecken')+'">'+(ui.hide?'<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 6.1A9.9 9.9 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.7 3.3M6.2 7.6A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 3.9-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>':'<svg viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="3"/></svg>')+'</button></header><main class="stack v-'+cur+(cur==='immo'?' iv-'+(ui.immo||'miete'):'')+(cur==='mehr'&&mehrSub()?' ms-'+mehrSub():'')+'">'+V[cur]()+'</main><nav class="bar" aria-label="Bereiche">'+nav+'</nav><input type="file" id="f-file" accept=".csv,.txt,.pdf,text/csv,application/pdf" hidden><input type="file" id="f-receipt" accept="image/*" capture="environment" hidden>';wideLayout(cur);
 }
 const monthBar=()=>'<div class="mbar"><button class="ic" data-act="prevMonth" aria-label="Vorheriger Monat">‹</button><strong>'+esc(monthLabel(ui.month))+'</strong><button class="ic" data-act="nextMonth" aria-label="Nächster Monat">›</button></div>';
 const uploadBtn=()=>'<button class="upload" data-act="pickFile">'+ICON.up+'<span><strong>Kontoauszug hochladen</strong><small>PDF oder CSV aus dem Online-Banking</small></span></button>';
@@ -672,17 +672,17 @@ function docSection(u){const L=(S.docs||[]).filter(d=>d.unitId===u.id).sort((x,y
     :'<p class="hint">Lade den Mietvertrag als PDF oder Foto hoch. Er wird verschlüsselt gespeichert, nur du kannst ihn öffnen.</p>')}
 function docPick(unitId){const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';inp.multiple=true;
   inp.onchange=async()=>{const F=[...inp.files];if(!F.length)return;
-    modal('<h3>Dokument speichern</h3><label>Bezeichnung<input id="f-dt" value="'+esc(F.length===1?F[0].name.replace(/\.[a-z0-9]+$/i,''):'Mietvertrag')+'"></label><label>Datum<input id="f-dd" type="date" value="'+todayISO()+'"></label><label>Bei der Porezna gemeldet?<select id="f-drpo"><option value="ok">Ja, erledigt oder vom Notar</option><option value="open">Nein, muss ich noch einreichen</option><option value="na">Betrifft nicht (kein Mietvertrag)</option></select></label><p class="hint">'+F.length+(F.length===1?' Datei':' Dateien')+'. Fotos werden verkleinert, PDFs bis 5 MB.</p><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="docSave">Speichern</button></div>');
-    docPick.pending={unitId,files:F}};
+    modal('<h3>Dokument speichern</h3><label>Bezeichnung<input id="f-dt" value="'+esc(F.length===1?F[0].name.replace(/\.[a-z0-9]+$/i,''):'Mietvertrag')+'"></label><label>Datum<input id="f-dd" type="date" value="'+todayISO()+'"></label><label>Bei der Porezna gemeldet?<select id="f-drpo"><option value="ok">Ja, erledigt oder vom Notar</option><option value="open">Nein, muss ich noch einreichen</option><option value="na">Betrifft nicht (kein Mietvertrag)</option></select></label><div id="ctrbox"></div><p class="hint">'+F.length+(F.length===1?' Datei':' Dateien')+'. Fotos werden verkleinert, PDFs bis 5 MB.</p><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="docSave">Speichern</button></div>');
+    docPick.pending={unitId,files:F};ctrScan(unitId,F)};
   inp.click()}
 async function docShrink(f){if(!/^image\//.test(f.type))return {buf:new Uint8Array(await f.arrayBuffer()),type:f.type||'application/pdf'};
   const img=await createImageBitmap(f);const m=Math.min(1,2000/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*m);c.height=Math.round(img.height*m);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
   const bl=await new Promise(r=>c.toBlob(r,'image/jpeg',.82));return {buf:new Uint8Array(await bl.arrayBuffer()),type:'image/jpeg'}}
-async function docSave(){const p=docPick.pending;if(!p)return;const title=$('#f-dt').value.trim()||'Dokument',date=$('#f-dd').value||todayISO(),rpo=$('#f-drpo').value;closeModal();
+async function docSave(){const p=docPick.pending;if(!p)return;const title=$('#f-dt').value.trim()||'Dokument',date=$('#f-dd').value||todayISO(),rpo=$('#f-drpo').value,nC=ctrApply(p.unitId);closeModal();if(nC)save();
   let n=0;for(const f of p.files){try{const {buf,type}=await docShrink(f);if(buf.length>5*1048576){toast(f.name+' ist größer als 5 MB.');continue}
     const id=uid();toast('Wird verschlüsselt gespeichert …');await docPut(id,buf);S.docs=S.docs||[];S.docs.push({id,unitId:p.unitId,title:p.files.length>1?title+' ('+(n+1)+')':title,name:f.name,type,size:buf.length,date,rpo});n++}
     catch(e){toast('Speichern fehlgeschlagen: '+(e.code==='QUOTA'?'Speicher voll.':e.code==='NETWORK'?'keine Verbindung.':'bitte erneut versuchen.'))}}
-  if(n){if(rpo==='open'){const u=unitOf(p.unitId);if(u)u.rpo='open'}save();toast(n===1?'Dokument gespeichert.':n+' Dokumente gespeichert.');unitDetail(p.unitId)}docPick.pending=null}
+  if(n){if(rpo==='open'){const u=unitOf(p.unitId);if(u)u.rpo='open'}save();toast(nC&&n===1?'Dokument gespeichert. '+nC+' Angaben übernommen.':n===1?'Dokument gespeichert.':n+' Dokumente gespeichert.');unitDetail(p.unitId)}else if(nC){render();unitDetail(p.unitId)}docPick.pending=null}
 async function docKey(){if(loggedIn())return await getMK();let k=await idbGet(KV,'doc-key');if(!k){k=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);await idbSet(KV,'doc-key',k)}return k}
 async function docPut(id,buf){const ct=await gcmEnc(await docKey(),buf);
   if(!loggedIn()){await idbSet(KV,'doc:'+id,ct);return}
@@ -2192,7 +2192,8 @@ function repDlg(id){const p=akteP(),r=id?(S.repairs||[]).find(x=>x.id===id):{pro
 /* ---------- Daten ergänzen (Datei, z. B. aus Excel) ---------- */
 var mrg=null;
 function mergeDlg(){modal('<h3>Daten ergänzen</h3><p class="hint">Ergänzt Daten aus einer Datei, zum Beispiel aus deiner Excel-Tabelle. Was schon in der App steht, bleibt unverändert. Du siehst vorher, was neu dazukommt.</p><input type="file" id="f-mgfile" accept=".json,application/json,text/plain"><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="mergeLoad">Weiter</button></div>')}
-function mergeGuess(){const d=mrg.d,mp=mrg.map={props:{},units:{}};
+function mergeGuess(){const d=mrg.d,mp=mrg.map={props:{},units:{},accs:{}};
+  (d.accounts||[]).forEach(ia=>{let re=null;try{re=new RegExp(ia.match||nkey(ia.name),'i')}catch(e){}const C=S.accounts.filter(x=>re&&re.test(nrm(x.name+' '+(x.iban||''))));const used=new Set(Object.values(mp.accs));const hit=C.filter(x=>!used.has(x.id)).sort((x,y)=>(y.history||[]).length-(x.history||[]).length)[0];mp.accs[ia.key]=hit?hit.id:'new'});
   (d.props||[]).forEach(ip=>{let re=null;try{re=new RegExp(ip.match||nkey(ip.name),'i')}catch(e){}const hit=S.props.find(p=>re&&re.test(nrm(p.name+' '+(p.address||''))));mp.props[ip.key]=hit?hit.id:'new'});
   (d.units||[]).forEach(iu=>{const pid=mp.props[iu.prop];if(!pid||pid==='new'){mp.units[iu.key]='new';return}const C=S.units.filter(u=>u.propertyId===pid),taken=new Set(Object.values(mp.units));let re=null;try{re=new RegExp(iu.match||nkey(iu.name),'i')}catch(e){}
     let hit=C.find(u=>!taken.has(u.id)&&re&&re.test(nrm(u.name)));
@@ -2214,15 +2215,18 @@ function mergePlan(){const d=mrg.d,mp=mrg.map,G=[];const pid=k=>mp.props[k],uidO
   const dig=s=>String(s||'').replace(/\D/g,'');
   const mt=(d.meters||[]).filter(m=>isNew(pid(m.prop))||!(S.meterDevs||[]).some(e=>e.propertyId===pid(m.prop)&&((dig(m.number)&&dig(e.number)===dig(m.number))||(m.omm&&e.omm===m.omm)||(!dig(m.number)&&!m.omm&&e.kind===m.kind&&nkey(e.place)===nkey(m.place)))));g('met','Zähler',mt,(d.meters||[]).length-mt.length);
   const pl=(d.plans||[]).filter(x=>isNew(pid(x.prop))||!(S.plans||[]).some(e=>e.propertyId===pid(x.prop)&&nkey(e.title)===nkey(x.title)));g('plan','Modernisierungsplan',pl,(d.plans||[]).length-pl.length,(S.plans||[]).length&&pl.length?'Die App hat schon einen Plan. Nur ankreuzen, wenn diese Einträge wirklich fehlen.':'');
+  const ac=[];(d.accounts||[]).forEach(ia=>{const t=mp.accs[ia.key];if(t==='skip')return;const ex=isNew(t)?null:S.accounts.find(x=>x.id===t);(ia.history||[]).forEach(h=>{if(!ex||!(ex.history||[]).some(e=>e.date===h.date))ac.push({ia,h})})});
+  g('acc','Kontostände (Verlauf)',ac,(d.accounts||[]).reduce((s,x)=>s+(x.history||[]).length,0)-ac.length);
   const nt=(d.notes||[]).filter(x=>!(S.notes||[]).some(e=>nkey(e.title)===nkey(x.title)));g('note','Notizen',nt,(d.notes||[]).length-nt.length,(S.notes||[]).length&&nt.length?'Die App hat schon Notizen. Nur ankreuzen, wenn diese wirklich fehlen.':'');
   G.forEach(x=>{if(mrg.on[x.k]==null)mrg.on[x.k]=x.neu.length>0&&!x.note});
   return G}
 function mergePreview(){const d=mrg.d,mp=mrg.map,G=mergePlan();
   const pmap=(d.props||[]).map(ip=>'<div class="mgp"><label><span>'+esc(ip.name)+'</span><select data-mgp="'+esc(ip.key)+'"><option value="new">Neu anlegen</option>'+S.props.map(p=>'<option value="'+p.id+'"'+sel(mp.props[ip.key]===p.id)+'>'+esc(p.name)+'</option>').join('')+'</select></label>'
     +(d.units||[]).filter(u=>u.prop===ip.key).map(iu=>{const pid=mp.props[ip.key],C=pid&&pid!=='new'?S.units.filter(u=>u.propertyId===pid):[];return '<label class="mgu"><span>'+esc(iu.name)+'</span><select data-mgu="'+esc(iu.key)+'"><option value="new">Neu anlegen</option>'+C.map(u=>'<option value="'+u.id+'"'+sel(mp.units[iu.key]===u.id)+'>'+esc(u.name)+(u.tenant?' ('+esc(u.tenant)+')':'')+'</option>').join('')+'</select></label>'}).join('')+'</div>').join('');
+  const amap=(d.accounts||[]).length?'<div class="mgp">'+(d.accounts||[]).map(ia=>'<label><span>'+esc(ia.name)+'</span><select data-mga="'+esc(ia.key)+'"><option value="new">Neu anlegen</option><option value="skip"'+sel(mp.accs[ia.key]==='skip')+'>Nicht übernehmen</option>'+S.accounts.map(x=>'<option value="'+x.id+'"'+sel(mp.accs[ia.key]===x.id)+'>'+esc(x.name)+'</option>').join('')+'</select></label>').join('')+'</div>':'';
   const n=G.filter(x=>mrg.on[x.k]&&x.k!=='struct').reduce((s,x)=>s+x.neu.length,0)+G[0].neu.length;
   modal('<div class="mhead"><div><h3>Daten ergänzen</h3><small>'+esc(d.source||'Datei')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
-    +'<h4 class="mgh">1. Wohin gehört was?</h4><p class="hint">Links steht der Name aus der Datei, rechts dein Objekt oder deine Einheit in der App. Bitte kurz prüfen.</p>'+pmap
+    +'<h4 class="mgh">1. Wohin gehört was?</h4><p class="hint">Links steht der Name aus der Datei, rechts dein Objekt, deine Einheit oder dein Konto in der App. Bitte kurz prüfen.</p>'+pmap+amap
     +'<h4 class="mgh">2. Was kommt dazu?</h4><div class="mgl">'+G.filter(x=>x.k!=='struct').map(x=>'<label class="mgr'+(x.neu.length?'':' dim')+'"><input type="checkbox" data-mgon="'+x.k+'"'+(mrg.on[x.k]&&x.neu.length?' checked':'')+(x.neu.length?'':' disabled')+'><span class="it"><strong>'+x.label+'</strong><small>'+(x.neu.length?x.neu.length+' neu':'nichts Neues')+(x.old?' · '+x.old+' schon da':'')+'</small>'+(x.note?'<small class="warn">'+x.note+'</small>':'')+'</span></label>').join('')+'</div>'
     +(G[0].neu.length?'<p class="hint">Es werden angelegt: '+G[0].neu.map(x=>esc(x.name)).join(', ')+'.</p>':'')
     +'<div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="mergeApply"'+(n?'':' disabled')+'>'+(n?n+' Einträge ergänzen':'Nichts zu ergänzen')+'</button></div>')}
@@ -2241,6 +2245,7 @@ function mergeApply(){const d=mrg.d,mp=mrg.map,G=mergePlan(),on=k=>mrg.on[k],grp
   use('dev').forEach(x=>{S.devices.push({id:uid(),unitId:mp.units[x.unit],name:x.name,year:x.year});cnt++});
   use('met').forEach(m=>{S.meterDevs.push({id:uid(),propertyId:mp.props[m.prop],kind:m.kind,number:m.number||'',place:m.place||'',omm:m.omm||'',account:m.account||'',code:m.code||'',note:m.note||'',readings:[]});cnt++});
   use('plan').forEach(x=>{S.plans.push({id:uid(),propertyId:mp.props[x.prop],title:x.title,prio:x.prio||'Mittel',year:x.year||null,est:x.est==null?null:x.est,act:null,status:x.status||'Geplant',note:x.note||''});cnt++});
+  use('acc').forEach(x=>{let t=mp.accs[x.ia.key];if(t==='skip')return;let acc=S.accounts.find(a=>a.id===t);if(!acc){acc={id:uid(),name:x.ia.name,type:x.ia.type||'bank',iban:'',history:[],note:''};S.accounts.push(acc);mp.accs[x.ia.key]=acc.id}acc.history=acc.history||[];if(!acc.history.some(h=>h.date===x.h.date)){acc.history.push({date:x.h.date,value:x.h.value});acc.history.sort((p,q)=>p.date.localeCompare(q.date));cnt++}});
   use('note').forEach(x=>{S.notes.push({id:uid(),title:x.title,text:x.text||''});cnt++});
   if(S.settings&&S.settings.immo===false)S.settings.immo=true;
   mrg=null;closeModal();save();ui.immo='akte';saveUi();if(location.hash!=='#immo')location.hash='#immo';else render();toast(cnt+' Einträge ergänzt.')}
@@ -2262,6 +2267,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!mrg||!t||!t.dataset)
   if(t.dataset.mgp){mrg.map.props[t.dataset.mgp]=t.value;(mrg.d.units||[]).filter(u=>u.prop===t.dataset.mgp).forEach(u=>mrg.map.units[u.key]='new');
     if(t.value!=='new'){const keep=Object.assign({},mrg.map.props);mergeGuess();Object.assign(mrg.map.props,keep);(mrg.d.units||[]).forEach(u=>{if(mrg.map.props[u.prop]==='new')mrg.map.units[u.key]='new'})}mrg.on={};mergePreview()}
   else if(t.dataset.mgu){mrg.map.units[t.dataset.mgu]=t.value;mrg.on={};mergePreview()}
+  else if(t.dataset.mga){mrg.map.accs[t.dataset.mga]=t.value;mrg.on={};mergePreview()}
   else if(t.dataset.mgon){mrg.on[t.dataset.mgon]=t.checked;mergePreview()}
 });
 I18N.push(['Objekt-Akte','Property file','Dosje objekta'],['Verträge & Kautionen','Contracts & deposits','Ugovori i polozi'],['Fixe Nebenkosten','Fixed running costs','Fiksne režije'],['Reparaturen','Repairs','Popravci'],['Rücklage','Reserve','Pričuva'],['Gekaufte Geräte','Purchased appliances','Kupljeni uređaji'],
@@ -2273,3 +2279,69 @@ I18N.push(['Objekt-Akte','Property file','Dosje objekta'],['Verträge & Kautione
 ['Daten ergänzen','Add data','Dopuni podatke'],['Weiter','Next','Dalje'],['Neu anlegen','Create new','Dodaj novo'],['1. Wohin gehört was?','1. What belongs where?','1. Što kamo spada?'],['2. Was kommt dazu?','2. What is added?','2. Što se dodaje?'],['Rücklagen-Plan','Reserve plan','Plan pričuve'],['Notizen','Notes','Bilješke'],['Objekte & Einheiten','Properties & units','Objekti i jedinice'],['Nichts zu ergänzen','Nothing to add','Nema što dodati'],['{n} Einträge ergänzen','Add {n} entries','Dodaj {n} unosa'],['{n} Einträge ergänzt.','{n} entries added.','Dodano {n} unosa.'],['nichts Neues','nothing new','ništa novo'],
 ['Verlängert sich um (Monate)','Renews by (months)','Produljuje se za (mjeseci)'],['Notiz zur Kaution','Note on deposit','Napomena uz polog'],['Notariell beglaubigt?','Notarised?','Ovjeren kod bilježnika?'],['Unbekannt','Unknown','Nepoznato'],['Rücklage pro Monat (€)','Reserve per month (€)','Pričuva mjesečno (€)'],['Aus Datei ergänzen','Add from file','Dopuni iz datoteke'],['Modernisierung','Modernisation','Modernizacija']);
 I18N.push(['Verlängert sich um','Renews by','Produljuje se za'],['{n} Monate','{n} months','{n} mjeseci'],['Fehlende Daten aus einer Datei dazunehmen, z. B. aus Excel','Add missing data from a file, e.g. from Excel','Dodaj podatke koji nedostaju iz datoteke, npr. iz Excela'],['Bitte eintragen, was gemacht wurde.','Please enter what was done.','Upiši što je napravljeno.'],['Bitte den Monat wählen.','Please choose the month.','Odaberi mjesec.'],['Bitte eine Datei auswählen.','Please choose a file.','Odaberi datoteku.'],['Die Datei kann nicht gelesen werden.','The file cannot be read.','Datoteka se ne može pročitati.']);
+
+/* ---------- Mietvertrag lesen: Mieter, Miete, Kaution, Laufzeit in die Einheit übernehmen ---------- */
+async function ctrText(file){const L=await loadPdfjs();const pdf=await L.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const rows=await pdfToLines(pdf);return rows.map(r=>r.text).join('\n')}
+function ctrDate(d,m,y){y=+y;if(y<100)y+=2000;d=+d;m=+m;if(!(d>=1&&d<=31&&m>=1&&m<=12&&y>=1990&&y<=2100))return '';return y+'-'+pad(m)+'-'+pad(d)}
+const CTR_D='(\\d{1,2})\\s?[.\\/]\\s?(\\d{1,2})\\s?[.\\/]\\s?(\\d{4}|\\d{2})';
+const CTR_N='(\\d{1,3}(?:[.\\s]\\d{3})+(?:,\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)';
+function ctrMoney(T,words){const re=new RegExp('(?:'+words+')[^0-9€\\n]{0,90}?'+CTR_N+'\\s*(€|eur(?:a|o)?\\b|kn\\b|kuna)','gi');let m;
+  while((m=re.exec(T))){if(/kn|kuna/i.test(m[2]))continue;const v=hrNum(m[1].replace(/\s/g,''));if(v>=20&&v<=50000)return v}return 0}
+function ctrClean(s){s=String(s||'').replace(/\s+/g,' ').trim()
+    .replace(/^(?:i|und|and|te|između|zwischen|između\s+\S+\s+i)\s+/i,'')
+    .replace(/^(?:gospodin(?:a)?|gospođ(?:a|e)|g\.|gđa|gđe|herr(?:n)?|frau|mr\.?|mrs\.?|ms\.?|tvrtk[ae]|firm[ae]|društvo)\s+/i,'')
+    .replace(/\s*[,;].*$/,'').replace(/\s+(?:OIB|MBS|MB|JMBG|geb\.|geboren|rođen\w*|s\s+prebivali\w*|sa\s+sjedi\w*|iz|wohnhaft|whose|residing|with\s+registered)\b.*$/i,'')
+    .replace(/[„“"'(]+$|^[„“"')]+/g,'').trim();
+  if(s.length<3||s.length>80||!/[A-Za-zČĆŽŠĐčćžšđÄÖÜäöü]{2}/.test(s)||/_{2,}|\.{3,}|dužan|obvez|verpflicht|shall|potpis|unterschrift|signature/i.test(s)||/^(je|se|ima|der|die|das|ist|hat)\b/i.test(s))return '';
+  return s}
+function ctrParse(text){const T=String(text||'').replace(/\r/g,''),F=T.replace(/\s+/g,' '),o={};
+  /* Mieter: zuerst die Einleitung „… (u daljnjem tekstu: Najmoprimac)“, sonst „Najmoprimac: …“ */
+  const tag=/\(?\s*(?:u\s+dalj\w*\s+tekstu|dalje\s+u\s+tekstu|u\s+nastavku|nachfolgend|nachstehend|im\s+folgenden|hereinafter)[^)]{0,25}?[„“"']?\s*\b(?:najmoprim\w*|zakupnik\w*|mieter(?:in)?|tenant|lessee)\b/ig;let m;
+  while(!o.tenant&&(m=tag.exec(F))){const before=F.slice(Math.max(0,m.index-260),m.index);
+    const parts=before.split(/\)|:|\bi\s+(?=[A-ZČĆŽŠĐ])|\bund\s+(?=[A-ZÄÖÜ])|\band\s+(?=[A-Z])|između|zwischen|between|\d\.\s/);const n=ctrClean(parts[parts.length-1]);if(n)o.tenant=n}
+  if(!o.tenant){const lab=/(?:^|\n)\s*(?:najmoprimac|najmoprimca|zakupnik|mieter(?:in)?|tenant|lessee)\s*[:\-–]\s*([^\n]*)(?:\n([^\n]*))?/ig;
+    while(!o.tenant&&(m=lab.exec(T))){const n=ctrClean(m[1])||(!m[1].trim()?ctrClean(m[2]):'');if(n)o.tenant=n}}
+  o.rent=ctrMoney(F,'najamnin\\w*|zakupnin\\w*|mjese[cč]n\\w*\\s+najam\\w*|iznos\\w*\\s+najma|kaltmiete|warmmiete|monatliche\\s+miete|miete\\b|monthly\\s+rent|\\brent\\b');
+  o.deposit=ctrMoney(F,'polog\\w*|jam[cč]evin\\w*|depozit\\w*|kaucij\\w*|kaution|mietsicherheit|security\\s+deposit|deposit');
+  const per=new RegExp('(?:\\bod|\\bvom|\\bab|\\bfrom)\\s+'+CTR_D+'\\.?\\s*(?:godine\\s*)?(?:\\bdo|\\bbis(?:\\s+zum)?|\\bto|\\buntil|-|–)\\s+'+CTR_D,'i').exec(F);
+  if(per){o.start=ctrDate(per[1],per[2],per[3]);o.end=ctrDate(per[4],per[5],per[6]);if(o.end&&o.start&&o.end<=o.start)o.end=''}
+  if(!o.end){const e=new RegExp('(?:traje\\s+do|vrijedi\\s+do|zaklju[cč]no\\s+s|zaklju[cč]no\\s+do|endet\\s+am|befristet\\s+bis(?:\\s+zum)?|l[äa]uft\\s+bis(?:\\s+zum)?|ends\\s+on|until)\\s+'+CTR_D,'i').exec(F);if(e)o.end=ctrDate(e[1],e[2],e[3])}
+  if(!o.start){const s=new RegExp('(?:po[cč]inje|stupa\\s+na\\s+snagu|beginnt\\s+am|mietbeginn|commences\\s+on|starts\\s+on)[^0-9]{0,20}'+CTR_D,'i').exec(F);if(s)o.start=ctrDate(s[1],s[2],s[3])}
+  const W={jedan:1,jednog:1,jedna:1,dva:2,dvije:2,tri:3,četiri:4,cetiri:4,šest:6,sest:6,ein:1,einem:1,zwei:2,drei:3,sechs:6,one:1,two:2,three:3,six:6};
+  const nt=/(?:otkazn\w*\s+rok\w*|rok\w*\s+otkaz\w*|k[üu]ndigungsfrist|notice\s+period)[^0-9a-zčćžšđ]{0,60}?(?:\S+\s+){0,4}?(\d{1,3}|jedan|jednog|jedna|dva|dvije|tri|četiri|cetiri|šest|sest|ein|einem|zwei|drei|sechs|one|two|three|six)\s*(?:\(\w+\)\s*)?(mjesec\w*|monat\w*|month\w*|dan\w*|tag\w*|day\w*)/i.exec(F);
+  if(nt){let n=W[nt[1].toLowerCase()]||+nt[1];if(/^(dan|tag|day)/i.test(nt[2]))n=Math.round(n/30);if(n>=1&&n<=24)o.notice=n}
+  return o}
+const CTR_F=[['tenant','Mieter',v=>v],['rent','Miete / Monat',v=>eur(v)],['deposit','Kaution',v=>eur(v)],['start','Mietbeginn',v=>dfmt(v)],['end','Vertrag bis',v=>dfmt(v)],['notice','Kündigungsfrist',v=>v+' Monate']];
+function ctrOld(u,k){return k==='tenant'?u.tenant:k==='rent'?u.rent:k==='deposit'?u.deposit:k==='start'?(u.start?u.start+'-01':''):k==='end'?u.contractEnd:u.noticeMonths}
+function ctrSame(u,k,v){const o=ctrOld(u,k);if(k==='tenant')return nkey(o||'')===nkey(v);if(k==='start')return (u.start||'')===v.slice(0,7);return o!=null&&o!==''&&String(o)===String(v)}
+function ctrBox(u,o){const L=CTR_F.filter(([k])=>o[k]);if(!L.length)return '<p class="hint ctrnone">Im Vertrag wurde nichts erkannt, was die App übernehmen kann. Fotos und eingescannte PDFs ohne Text kann sie noch nicht lesen.</p>';
+  return '<div class="ctrb"><b>Aus dem Vertrag erkannt</b><small>Angehakt wird in „'+esc(unitLabel(u))+'“ übernommen.</small>'+L.map(([k,l,f])=>{const old=ctrOld(u,k),same=ctrSame(u,k,o[k]);
+    return '<label class="mgr'+(same?' dim':'')+'"><input type="checkbox" data-ctr="'+k+'"'+(same?' disabled':' checked')+'><span class="it"><strong>'+l+': '+esc(f(o[k]))+'</strong><small>'+(same?'steht schon so drin':old!=null&&old!==''&&old!==0?'bisher: '+esc(k==='tenant'?old:f(k==='start'?old:old)):'bisher leer')+'</small></span></label>'}).join('')+'</div>'}
+async function ctrScan(unitId,files){const box=$('#ctrbox'),u=unitOf(unitId);if(!box||!u)return;const f=files.find(x=>/pdf/i.test(x.type)||/\.pdf$/i.test(x.name));
+  if(!f){box.innerHTML=files.length?'<p class="hint ctrnone">Aus Fotos kann die App den Mieter noch nicht lesen. Bei einem PDF trägt sie Name, Miete und Laufzeit selbst ein.</p>':'';return}
+  box.innerHTML='<p class="hint">Vertrag wird gelesen …</p>';let o={};try{o=ctrParse(await ctrText(f))}catch(e){o={}}
+  if(!$('#ctrbox')||!docPick.pending)return;docPick.pending.ctr=o;$('#ctrbox').innerHTML=ctrBox(u,o);
+  if(o.start&&$('#f-dd'))$('#f-dd').value=o.start}
+function ctrApply(unitId){const p=docPick.pending,o=p&&p.ctr,u=unitOf(unitId);if(!o||!u)return 0;let n=0;
+  document.querySelectorAll('#modal [data-ctr]').forEach(c=>{if(!c.checked||c.disabled)return;const k=c.dataset.ctr,v=o[k];n++;
+    if(k==='tenant'){const old=u.tenant;u.tenant=v;if(old&&!(u.keywords||'').trim()){const ta=nrm(old).split(/[\s,]+/).filter(x=>x.length>=4),tb=nrm(v).split(/[\s,]+/).filter(x=>x.length>=4),sh=ta.filter(x=>tb.includes(x));if(sh.length&&!ta.every(x=>tb.includes(x)))u.keywords=sh.join(', ')}}
+    else if(k==='rent')u.rent=v;else if(k==='deposit')u.deposit=v;else if(k==='start')u.start=v.slice(0,7);else if(k==='end')u.contractEnd=v;else if(k==='notice')u.noticeMonths=v});
+  return n}
+I18N.push(['Aus dem Vertrag erkannt','Found in the contract','Prepoznato u ugovoru'],['Angehakt wird in „{n}“ übernommen.','Ticked items are saved to “{n}”.','Označeno se sprema u „{n}”.'],['Mieter: {n}','Tenant: {n}','Najmoprimac: {n}'],['Miete / Monat: {n}','Rent / month: {n}','Najamnina / mjesec: {n}'],['Kaution: {n}','Deposit: {n}','Polog: {n}'],['Mietbeginn: {n}','Lease start: {n}','Početak najma: {n}'],['Vertrag bis: {n}','Contract until: {n}','Ugovor do: {n}'],['Kündigungsfrist: {n} Monate','Notice period: {n} months','Otkazni rok: {n} mjeseci'],['steht schon so drin','already saved like this','već je tako upisano'],['bisher: {n}','so far: {n}','dosad: {n}'],['bisher leer','empty so far','dosad prazno'],['Vertrag wird gelesen …','Reading contract …','Čitam ugovor …'],
+['Im Vertrag wurde nichts erkannt, was die App übernehmen kann. Fotos und eingescannte PDFs ohne Text kann sie noch nicht lesen.','Nothing the app can take over was found in the contract. Photos and scanned PDFs without text cannot be read yet.','U ugovoru nije prepoznato ništa što aplikacija može preuzeti. Fotografije i skenirane PDF-ove bez teksta još ne može čitati.'],
+['Aus Fotos kann die App den Mieter noch nicht lesen. Bei einem PDF trägt sie Name, Miete und Laufzeit selbst ein.','The app cannot read the tenant from photos yet. With a PDF it fills in name, rent and term itself.','Iz fotografija aplikacija još ne može pročitati najmoprimca. Kod PDF-a sama upisuje ime, najamninu i trajanje.'],['Dokument gespeichert. {n} Angaben übernommen.','Document saved. {n} details taken over.','Dokument spremljen. Preuzeto podataka: {n}.']);
+
+/* ---------- Breite Ansicht (Tablet quer, PC): Karten in zwei Spalten ---------- */
+const WIDE=window.matchMedia?matchMedia('(min-width:900px)'):{matches:false};
+if(WIDE.addEventListener)WIDE.addEventListener('change',()=>{try{render()}catch(e){}});
+function wideLayout(cur){const m=document.querySelector('main.stack');if(!m||!WIDE.matches)return;
+  const cols=(L,R,before)=>{L=L.filter(Boolean);R=R.filter(Boolean);if(!L.length&&!R.length)return;const w=document.createElement('div');w.className='wcols';const a=document.createElement('div'),b=document.createElement('div');a.className=b.className='wcol';
+    (before&&before.parentNode===m?m.insertBefore(w,before):m.insertBefore(w,(L[0]||R[0])));L.forEach(x=>a.appendChild(x));R.forEach(x=>b.appendChild(x));w.append(a,b)};
+  const q=s=>m.querySelector(':scope>'+s);
+  const bal=list=>{list=list.filter(Boolean);if(list.length<2)return;const first=list[0],hs=list.map(x=>x.getBoundingClientRect().height);const L=[],R=[];let hl=0,hr=0;list.forEach((x,i)=>{if(hl<=hr){L.push(x);hl+=hs[i]+16}else{R.push(x);hr+=hs[i]+16}});cols(L,R,first)};
+  if(cur==='start')cols([q('.hero'),q('.wish')],[q('.ampel'),q('.ay'),q('.ab')],q('.hero'));
+  else if(m.classList.contains('iv-akte'))bal([...m.querySelectorAll(':scope>.aksec')].slice(1));
+  else if(cur==='konten')bal([...m.querySelectorAll(':scope>.group')]);
+}
+I18N.push(['Kontostände (Verlauf)','Account balances (history)','Stanja računa (povijest)'],['Nicht übernehmen','Do not import','Ne preuzimaj'],['Links steht der Name aus der Datei, rechts dein Objekt, deine Einheit oder dein Konto in der App. Bitte kurz prüfen.','On the left is the name from the file, on the right your property, unit or account in the app. Please check.','Lijevo je naziv iz datoteke, desno tvoj objekt, jedinica ili račun u aplikaciji. Molim provjeri.']);

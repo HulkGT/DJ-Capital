@@ -399,3 +399,34 @@ textarea.code{width:100%;min-height:150px;font:12px/1.4 ui-monospace,Menlo,Conso
 .mbox label.mgr{flex-direction:row;font-weight:400}
 .mgr{display:flex;align-items:flex-start;gap:10px;background:var(--bg);border-radius:12px;padding:10px 12px;min-height:44px}
 .mgr input{width:20px;height:20px;flex:none;margin-top:2px}.mgr .it{display:flex;flex-direction:column}.mgr small{color:var(--muted)}.mgr small.warn{color:var(--warn)}.mgr.dim{opacity:.6}
+
+/* ---------- Breite Ansicht: Tablet quer und PC ---------- */
+@media (min-width:900px){
+  :root{--side:224px}
+  .bar{top:0;right:auto;width:var(--side);flex-direction:column;justify-content:flex-start;gap:4px;padding:96px 12px 20px;border-top:0;border-right:1px solid var(--line);background:#0e1118}
+  .bar a{flex:none;max-width:none;flex-direction:row;gap:12px;padding:12px 14px;font-size:.95rem;border-radius:12px}
+  .bar a:hover{background:var(--surface);color:var(--ink)}
+  .bar a.on{background:var(--raised);color:var(--ink);box-shadow:inset 3px 0 0 var(--accent)}
+  .bar a.on svg{color:var(--accent)}
+  .badge{position:static;margin-left:auto}
+  .top{padding:16px 32px;z-index:7}
+  main.stack{max-width:1160px;margin:0 0 0 var(--side);padding:8px 32px 40px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px;align-items:start}
+  main>*{grid-column:1/-1;min-width:0}
+  .toast{bottom:28px;left:calc(50% + var(--side)/2)}
+  /* Übersicht */
+  .wcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px;align-items:start}
+  .wcol{display:flex;flex-direction:column;gap:16px;min-width:0}
+  /* Immobilien */
+  main.iv-akte>.aksec:first-of-type .aklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  main.iv-miete>details.obj,main.iv-infos>details.obj,main.iv-infos>.rend{grid-column:auto}
+  main.iv-ruecklage>.hero{grid-column:1}main.iv-ruecklage>.tiles3{grid-column:2;align-self:stretch}
+  main.iv-plan>.group{grid-column:auto}
+  /* Konten, Mehr */
+  main.v-mehr:not([class*=ms-])>.mstat{grid-column:1}main.v-mehr:not([class*=ms-])>.mlist{grid-column:2;grid-row:span 3}
+  main.ms-remind>.ritem{grid-column:auto}
+  main.ms-acct{max-width:860px}
+  .itabs{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .tiles3>button{text-align:left;align-items:flex-start;justify-content:flex-start}
+}
+@media (min-width:1500px){main.stack{margin-left:calc(var(--side) + (100vw - var(--side) - 1160px)/2 - 8px)}}
+.ctrb{display:flex;flex-direction:column;gap:6px;background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:12px}.ctrb>small{color:var(--muted);margin-top:-4px}.ctrb label.mgr{flex-direction:row;font-weight:400}
