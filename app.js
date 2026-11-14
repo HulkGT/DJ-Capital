@@ -132,7 +132,9 @@ function rentStatus(unit,ym,txs,today){
 /* ---------- Zustand & Migration ---------- */
 const EXP_CATS=['Lebensmittel','Wohnen & Nebenkosten','Auto & Tanken','Versicherung','Handy, Internet & Abos','Familie & Kinder','Freizeit & Restaurant','Gesundheit','Kleidung','Reisen','Steuern','Kredit & Zinsen','Firma','Reparatur & Instandhaltung','Komunalna naknada','Müllabfuhr','HRT','Klima-Service','Sonstiges'];
 const INC_CATS=['Firma','Gehalt','Zinsen & Dividenden','Erstattung','Sonstige Einnahmen'];
-const ACC_TYPES={bank:'Bankkonto',bar:'Bargeld',depot:'Depot',sonst:'Sonstiges'};
+const ACC_TYPES={bank:'Bankkonto',bar:'Bargeld',depot:'Depot',krypto:'Krypto',sonst:'Sonstiges'};
+const cryptoOn=()=>!!(S&&S.settings&&S.settings.crypto===true);
+const accsVis=()=>S.accounts.filter(a=>a.type!=='krypto'||cryptoOn());
 const LSKEY='jozic-v3';
 let S=null;
 function dedupeEbid(s){const seen={},drop=new Set();const score=t=>(t.type&&t.type!=='open'?4:0)+(t.receipt?2:0)+(t.propertyId?1:0);
@@ -222,10 +224,10 @@ const ICON={
 const accValue=a=>{const h=(a.history||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));return h.length?h[h.length-1]:null};
 const accValueAt=(a,d)=>{let v=0;(a.history||[]).forEach(h=>{if(h.date<=d)v=h.value});const f=(a.history||[]).filter(h=>h.date<=d).sort((x,y)=>x.date.localeCompare(y.date));return f.length?f[f.length-1].value:0};
 const propTotal=()=>0;
-const accTotal=()=>S.accounts.reduce((s,a)=>s+((accValue(a)||{}).value||0),0);
+const accTotal=()=>accsVis().reduce((s,a)=>s+((accValue(a)||{}).value||0),0);
 function worthSeries(){
-  const dates=[...new Set(S.accounts.flatMap(a=>(a.history||[]).map(h=>h.date)))].sort();
-  return dates.map(d=>({date:d,value:S.accounts.reduce((s,a)=>s+accValueAt(a,d),0)+propTotal()}));
+  const A=accsVis(),dates=[...new Set(A.flatMap(a=>(a.history||[]).map(h=>h.date)))].sort();
+  return dates.map(d=>({date:d,value:A.reduce((s,a)=>s+accValueAt(a,d),0)+propTotal()}));
 }
 const isInc=t=>t.type==='rent'||t.type==='income';
 const monthTx=ym=>S.txs.filter(t=>(t.type==='rent'?(t.forMonth||monthOf(t.date)):monthOf(t.date))===ym);
@@ -784,7 +786,7 @@ function noteDlg(id){const n=id?(S.notes||[]).find(x=>x.id===id):{title:'',text:
   modal('<h3>'+(id?'Notiz bearbeiten':'Neue Notiz')+'</h3><label>Titel<input id="f-nt" value="'+esc(n.title)+'" placeholder="z. B. Porezna uprava Pula"></label><label>Text<textarea id="f-nx" rows="6">'+esc(n.text)+'</textarea></label><div class="mact">'+(id?'<button class="danger" data-act="delNote" data-id="'+id+'">Löschen</button>':'')+'<button data-act="close">Abbrechen</button><button class="primary" data-act="saveNote" data-id="'+(id||'')+'">Speichern</button></div>')}
 /* ---------- Konten ---------- */
 function vKonten(){
-  const groups=Object.keys(ACC_TYPES).map(k=>[k,S.accounts.filter(a=>(a.type||'sonst')===k)]).filter(g=>g[1].length);
+  const groups=Object.keys(ACC_TYPES).map(k=>[k,accsVis().filter(a=>(a.type||'sonst')===k)]).filter(g=>g[1].length);
   return '<div class="h2row"><h2>Konten</h2><button class="primary" data-act="addAcc">+ Konto</button></div>'
   +'<div class="kline"><span>Guthaben gesamt</span><b class="num">'+eur(Math.round(accTotal()))+'</b></div>'+(creditTotal()>0?'<div class="kline"><span>Kredite</span><b class="num neg">−'+eur(Math.round(creditTotal()))+'</b></div><div class="kline"><span>Netto</span><b class="num">'+eur(Math.round(accTotal()-creditTotal()))+'</b></div>':'')
   +(groups.length?groups.map(([k,l])=>'<section class="group"><h3 class="gt">'+ACC_TYPES[k]+'</h3><div class="list" data-sort="accounts">'+l.map(a=>{const v=accValue(a);return '<button class="item bk" style="'+bankStyle(a)[1]+'" data-act="acc" data-id="'+a.id+'"><span class="blg" style="'+bankStyle(a)[2]+'">'+bankStyle(a)[0]+'</span><span class="it"><strong>'+esc(a.name)+'</strong><small>'+(v?'Stand '+dfmt(v.date):'Noch kein Stand')+'</small></span><span class="ir"><span class="num big">'+eur(v?v.value:0)+'</span></span></button>'}).join('')+'</div></section>').join(''):'<div class="empty">Noch kein Konto angelegt.</div>')
@@ -857,7 +859,7 @@ function accDetail(id){
   +'<div class="mact"><button class="danger" data-act="delAcc" data-id="'+a.id+'">Löschen</button><button data-act="editAcc" data-id="'+a.id+'">Umbenennen</button></div>');
 }
 function editAcc(id){const a=id?accOf(id):{name:'',type:'bank',note:''};
-  modal('<h3>'+(id?'Konto bearbeiten':'Neues Konto')+'</h3><label>Name<input id="f-aname" value="'+esc(a.name)+'" placeholder="z. B. Sparkasse, Bitcoin, Bargeld"></label><label>Art<select id="f-atype">'+Object.entries(ACC_TYPES).map(([k,v])=>'<option value="'+k+'"'+sel(k===a.type)+'>'+v+'</option>').join('')+'</select></label>'+(id?'':'<label>Aktueller Stand (€)<input id="f-aval" inputmode="decimal"></label>')+'<label>IBAN (damit Auszüge automatisch dem Konto zugeordnet werden)<input id="f-aiban" value="'+esc(a.iban||'')+'"></label><label>Notiz<input id="f-anote" value="'+esc(a.note)+'"></label><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveAcc" data-id="'+(id||'')+'">Speichern</button></div>')}
+  modal('<h3>'+(id?'Konto bearbeiten':'Neues Konto')+'</h3><label>Name<input id="f-aname" value="'+esc(a.name)+'" placeholder="z. B. Sparkasse, Bitcoin, Bargeld"></label><label>Art<select id="f-atype">'+Object.entries(ACC_TYPES).filter(([k])=>k!=='krypto'||cryptoOn()||a.type==='krypto').map(([k,v])=>'<option value="'+k+'"'+sel(k===a.type)+'>'+v+'</option>').join('')+'</select></label>'+(id?'':'<label>Aktueller Stand (€)<input id="f-aval" inputmode="decimal"></label>')+'<label>IBAN (damit Auszüge automatisch dem Konto zugeordnet werden)<input id="f-aiban" value="'+esc(a.iban||'')+'"></label><label>Notiz<input id="f-anote" value="'+esc(a.note)+'"></label><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveAcc" data-id="'+(id||'')+'">Speichern</button></div>')}
 /* ---------- Mehr ---------- */
 const MI={
  bank:'<path d="M3 10h18M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18M12 3l9 5H3z"/>',
@@ -1156,6 +1158,7 @@ document.addEventListener('click',e=>{
   case 'creditExtra':{const c=creditOf(id),e=parseDE($('#f-cx').value);if(!c||isNaN(e)||e<=0){toast('Bitte einen Betrag eingeben.');return}const x=creditCalc(c),nb=Math.max(0,x.bal-e),q=creditProj(nb,x.r,x.pay);
     $('#cxout').innerHTML='<div class="kvs"><div class="kv"><span>Zinsen gespart</span><b class="num pos">'+eur(Math.round(x.ti-q.ti))+'</b></div><div class="kv"><span>Früher fertig</span><b class="num pos">'+(x.months-q.months)+(x.months-q.months===1?' Monat':' Monate')+'</b></div><div class="kv"><span>Neu abbezahlt</span><b class="num">'+(q.months?monthLabel(addMonth(monthOf(todayISO()),q.months)):'sofort')+'</b></div></div><p class="hint">Gerechnet mit gleicher Rate. Prüfe im Kreditvertrag, ob und wie viel Sondertilgung erlaubt ist und ob die Bank dafür eine Gebühr verlangt.</p>';return}
   case 'creditAsk':S.settings=S.settings||{};S.settings.credit=b.dataset.v==='1';closeModal();go();if(b.dataset.v==='1')toast('Kredite findest du unter Konten.');return;
+  case 'toggleCrypto':S.settings=S.settings||{};S.settings.crypto=!cryptoOn();go();toast(cryptoOn()?'Krypto ist eingeschaltet. Du findest es unter Konten.':'Krypto ist ausgeblendet. Deine Daten bleiben gespeichert.');return;
   case 'toggleCredit':S.settings=S.settings||{};S.settings.credit=!creditOn();go();toast(creditOn()?'Kredite sind eingeschaltet. Du findest sie unter Konten.':'Kredite sind ausgeblendet. Deine Daten bleiben gespeichert.');return;
   case 'meter':meterDlg(id);return;
   case 'addMeterDev':meterDevDlg();return;case 'editMeterDev':meterDevDlg(id);return;
@@ -2083,6 +2086,7 @@ function acctPage(){const LI=loggedIn(),st=S.settings||{},nm=st.owner||(LI?acct.
     +(LI?row('bell','c4','Mitteilungen','Neue Rechnungen melden, auch wenn die App zu ist',swBtn(pushState(),pushState()?'pushOff':'pushOn','Mitteilungen')):'')+'</section>';
   h+='<div class="sgh">Bereiche der App</div><section class="sbox">'+row('immo','c3','Immobilien','Mieten, Mieter, Zähler, Modernisierung',swBtn(immoOn(),'toggleImmo','Immobilien'))
     +row('bank','c3','Kredite','Restschuld, Zins und Tilgung, unter Konten',swBtn(creditOn(),'toggleCredit','Kredite'))
+    +row('bank','c3','Krypto','Krypto-Stände unter Konten und im Vermögen',swBtn(cryptoOn(),'toggleCrypto','Krypto'))
     +row('globe','c3','Sprache','Language · Jezik','<select id="f-lang" aria-label="Sprache">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel((st.lang||'auto')===v)+'>'+t+'</option>').join('')+'</select>')
     +row('user','c3','Name im Jahresbericht',esc(st.owner||'Noch nicht eingetragen'),'<span class="chev">›</span>','ownerDlg')+'</section>';
   h+='<div class="sgh">Backup</div><section class="sbox">'+row('cloud','c2','Letztes Backup',st.lastBackup?dfmt(st.lastBackup)+' · '+(daysTo(st.lastBackup)===0?'heute':'vor '+(-daysTo(st.lastBackup))+(daysTo(st.lastBackup)===-1?' Tag':' Tagen')):(LI?'Deine Daten werden verschlüsselt synchronisiert. Ein Backup schadet trotzdem nicht.':'Noch keins. Die Daten liegen nur auf diesem Gerät.'),'')
@@ -2348,3 +2352,4 @@ function wideLayout(cur){const m=document.querySelector('main.stack');if(!m||!WI
 }
 I18N.push(['Kontostände (Verlauf)','Account balances (history)','Stanja računa (povijest)'],['Nicht übernehmen','Do not import','Ne preuzimaj'],['Links steht der Name aus der Datei, rechts dein Objekt, deine Einheit oder dein Konto in der App. Bitte kurz prüfen.','On the left is the name from the file, on the right your property, unit or account in the app. Please check.','Lijevo je naziv iz datoteke, desno tvoj objekt, jedinica ili račun u aplikaciji. Molim provjeri.']);
 I18N.push(['Kaufpreise','Purchase prices','Kupovne cijene']);
+I18N.push(['Krypto','Crypto','Kripto'],['Krypto-Stände unter Konten und im Vermögen','Crypto balances under accounts and in net worth','Stanja kripta pod računima i u imovini'],['Krypto ist eingeschaltet. Du findest es unter Konten.','Crypto is switched on. You will find it under accounts.','Kripto je uključen. Nalaziš ga pod računima.'],['Krypto ist ausgeblendet. Deine Daten bleiben gespeichert.','Crypto is hidden. Your data stays saved.','Kripto je skriven. Podaci ostaju spremljeni.']);
