@@ -249,9 +249,7 @@ details.bkset summary{cursor:pointer;color:var(--accent2);font-weight:600;margin
 .tic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none}
 .tic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .tic.tg{background:var(--good-bg);color:var(--good)}.tic.tb{background:var(--info-bg);color:var(--info)}.tic.to{background:rgba(255,91,46,.18);color:#ff8a66}.tic.ty{background:var(--warn-bg);color:var(--warn)}.tic.tv{background:rgba(167,139,250,.16);color:#b9a6ff}
-@media(min-width:560px){.itabs{grid-template-columns:repeat(5,minmax(0,1fr))}}
-.itabs button[data-v=plan]{grid-column:1/-1}
-@media(min-width:560px){.itabs button[data-v=plan]{grid-column:auto}}
+@media(min-width:560px){.itabs{grid-template-columns:repeat(6,minmax(0,1fr))}}
 .rend{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
 .rgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .rgrid div{display:flex;flex-direction:column;gap:2px;background:var(--raised);border-radius:10px;padding:7px 8px;min-width:0}
@@ -372,3 +370,32 @@ textarea.code{width:100%;min-height:150px;font:12px/1.4 ui-monospace,Menlo,Conso
 .sbtn{padding:0 14px 14px;margin:0}.sbtn button{flex:1}
 .logout{background:transparent;border:0;color:var(--bad);margin:10px auto 0;display:block}
 .howto code{font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--bg);padding:2px 5px;border-radius:6px;overflow-wrap:anywhere}
+
+/* Objekt-Akte */
+.pchips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.pchips button{flex:none;background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:8px 14px;color:var(--muted);font-weight:600;min-height:40px}
+.pchips button.on{border-color:var(--accent);color:var(--ink);background:var(--raised)}
+.pchips.sm button{padding:6px 12px;font-size:.88rem;min-height:36px}.pchips i{font-style:normal;color:var(--muted);font-weight:500;margin-left:4px}
+.aksec{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.akt1{display:flex;align-items:center;gap:10px}.akt1 .it{flex:1;display:flex;flex-direction:column;min-width:0}.akt1 small{color:var(--muted);font-size:.85rem}
+.aklist{display:flex;flex-direction:column;gap:8px}
+.akc{display:flex;flex-direction:column;gap:6px;text-align:left;width:100%;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;font-weight:400}
+.akc>small{color:var(--muted)}
+.akh{display:flex;justify-content:space-between;align-items:center;gap:8px}.akh b{font-size:1.02rem}
+.akg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:2px}
+.akg>span{display:flex;flex-direction:column;background:var(--bg);border-radius:10px;padding:7px 10px;min-width:0}
+.akg i{font-style:normal;color:var(--muted);font-size:.76rem}.akg b{font-weight:600}.akg em{font-style:normal;color:var(--muted);font-size:.76rem;overflow-wrap:anywhere}
+.akbox{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.akrep{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.akrh{display:flex;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--raised)}
+.akrr{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;padding:10px 14px;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;font-weight:400;min-height:44px}
+.akrr:last-child{border-bottom:0}.akm{flex:none;width:34px;color:var(--muted);font-size:.85rem;padding-top:1px}.akt{flex:1;min-width:0;overflow-wrap:anywhere}.akt .chip2{margin-left:2px}
+.aksum{border:1px solid var(--line)}
+.mgh{margin:10px 0 0;font-size:.95rem}
+.mgp{display:flex;flex-direction:column;gap:6px;background:var(--bg);border-radius:12px;padding:10px}
+.mgp label{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);align-items:center;gap:8px;font-weight:600}
+.mgp label.mgu{font-weight:400;padding-left:10px}.mgp label span{overflow-wrap:anywhere}
+.mgl{display:flex;flex-direction:column;gap:6px}
+.mbox label.mgr{flex-direction:row;font-weight:400}
+.mgr{display:flex;align-items:flex-start;gap:10px;background:var(--bg);border-radius:12px;padding:10px 12px;min-height:44px}
+.mgr input{width:20px;height:20px;flex:none;margin-top:2px}.mgr .it{display:flex;flex-direction:column}.mgr small{color:var(--muted)}.mgr small.warn{color:var(--warn)}.mgr.dim{opacity:.6}

@@ -139,7 +139,7 @@ function dedupeEbid(s){const seen={},drop=new Set();const score=t=>(t.type&&t.ty
   (s.txs||[]).forEach(t=>{if(!t||!t.ebid)return;const o=seen[t.ebid];if(!o){seen[t.ebid]=t;return}if(score(t)>score(o)){drop.add(o.id);seen[t.ebid]=t}else drop.add(t.id)});
   if(drop.size)s.txs=s.txs.filter(t=>!drop.has(t.id));return drop.size}
 function migrate(s){
-  ['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes','docs','credits'].forEach(k=>s[k]=s[k]||[]);
+  ['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes','docs','credits','repairs'].forEach(k=>s[k]=s[k]||[]);
   if(!s.cats||!s.cats.length)s.cats=EXP_CATS.slice();
   (s.notes||[]).forEach(n=>{if(n&&!n.id)n.id=uid()});
   dedupeEbid(s);
@@ -161,7 +161,7 @@ function idb(){if(!dbP)dbP=new Promise((res,rej)=>{const r=indexedDB.open(DBN,1)
 async function idbGet(st,k){const d=await idb();return new Promise((res,rej)=>{const q=d.transaction(st).objectStore(st).get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
 async function idbSet(st,k,v){const d=await idb();return new Promise((res,rej)=>{const t=d.transaction(st,'readwrite');t.objectStore(st).put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
 async function idbAll(st){const d=await idb();return new Promise((res,rej)=>{const o={},t=d.transaction(st),c=t.objectStore(st).openCursor();c.onsuccess=()=>{const x=c.result;if(x){o[x.key]=x.value;x.continue()}else res(o)};c.onerror=()=>rej(c.error)})}
-function blankState(){return {v:10,props:[],units:[],txs:[],rules:[],cats:EXP_CATS.slice(),icats:INC_CATS.slice(),accounts:[],plans:[],reserve:null,fixcosts:[],devices:[],meterDevs:[],taxRate:{base:0.7,rate:0.12},notes:[],reminders:[],settings:{remind:true,owner:''}}}
+function blankState(){return {v:10,props:[],units:[],txs:[],rules:[],cats:EXP_CATS.slice(),icats:INC_CATS.slice(),accounts:[],plans:[],reserve:null,fixcosts:[],devices:[],meterDevs:[],repairs:[],taxRate:{base:0.7,rate:0.12},notes:[],reminders:[],settings:{remind:true,owner:''}}}
 async function loadState(){let s=null;try{s=await idbGet(KV,'state')}catch(e){}if(!s||!s.v)s=blankState();s.settings=s.settings||{remind:true};return migrate(s)}
 let saveT=null;
 function setStatus(t,c){const el=document.getElementById('savest');if(el){el.textContent=t;el.className='savest '+(c||'')}}
@@ -237,9 +237,10 @@ function remindItems(){
   const T=todayISO(),out=[];
   S.units.forEach(u=>{
     if(u.rpo==='open'){const d0=(u.start||monthOf(T))+'-01',dl=new Date(Date.parse(d0)+8*864e5).toISOString().slice(0,10);out.push({date:dl,t:'Mietvertrag melden '+unitLabel(u),s:'Über ePorezna → Zahtjevi → RPO, Vertrag als Anhang. Frist 8 Tage ab Mietbeginn. Danach in der Einheit auf „erledigt“ stellen.',lvl:daysTo(dl)<0?'late':'partial'})}
-    if(u.contractEnd&&u.noticeMonths){const ym=addMonth(u.contractEnd.slice(0,7),-u.noticeMonths);const k=ym+'-'+pad(new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate());const d=daysTo(k);
-      if(d<=120&&u.contractEnd>=T)out.push({date:k,t:'Kündigungsfrist '+unitLabel(u),s:d<0?'Frist vorbei, Vertrag läuft bis '+dfmt(u.contractEnd):'Spätestens bis '+dfmt(k)+' kündigen, sonst verlängert sich der Vertrag',lvl:d<0?'late':d<=30?'partial':'pending'})}
-    if(u.contractEnd&&daysTo(u.contractEnd)<=120&&u.contractEnd>=T)out.push({date:u.contractEnd,t:'Vertragsende '+unitLabel(u),s:'Läuft am '+dfmt(u.contractEnd)+' aus',lvl:'partial'});
+    const ce=curEnd(u),nk=noticeBy(u);
+    if(ce&&nk){const k=nk;const d=daysTo(k);
+      if(d<=120&&ce>=T)out.push({date:k,t:'Kündigungsfrist '+unitLabel(u),s:d<0?'Frist vorbei, Vertrag läuft bis '+dfmt(ce):'Spätestens bis '+dfmt(k)+' kündigen, sonst verlängert sich der Vertrag',lvl:d<0?'late':d<=30?'partial':'pending'})}
+    if(ce&&!(+u.renew)&&daysTo(ce)<=120&&ce>=T)out.push({date:ce,t:'Vertragsende '+unitLabel(u),s:'Läuft am '+dfmt(ce)+' aus',lvl:'partial'});
     [monthOf(T),addMonth(monthOf(T),-1)].forEach(m=>{const s=rentStatus(u,m,S.txs,T);if(s&&(s.st==='late'||s.st==='partial'))out.push({date:m+'-'+pad(u.dueDay||5),t:'Miete '+unitLabel(u)+' '+monthLabel(m),s:s.st==='late'?'Noch nicht eingegangen ('+eur(s.exp)+')':'Es fehlen '+eur(s.missing),lvl:'late',act:'immo'})});
     if(u.cl&&u.cl.kind){const L=CL[u.cl.kind],n=L.filter(x=>u.cl.done&&u.cl.done[x[0]]).length;if(n<L.length)out.push({date:u.cl.started||T,t:(u.cl.kind==='auszug'?'Auszug ':'Einzug ')+unitLabel(u),s:n+' von '+L.length+' Aufgaben erledigt',lvl:'pending',act:'cl:'+u.id})}
   });
@@ -648,7 +649,7 @@ function expDetail(list){
 /* ---------- Immobilien ---------- */
 function vImmo(){
   const v=ui.immo||'miete',head='<div class="h2row"><h2>Immobilien</h2></div>';
-  if(v==='plan')return head+immoSeg()+vPlan();if(v==='ruecklage')return head+immoSeg()+vReserve();if(v==='infos')return head+immoSeg()+vInfos();if(v==='zaehler')return head+immoSeg()+vZaehler();
+  if(v==='akte')return head+immoSeg()+vAkte();if(v==='plan')return head+immoSeg()+vPlan();if(v==='ruecklage')return head+immoSeg()+vReserve();if(v==='infos')return head+immoSeg()+vInfos();if(v==='zaehler')return head+immoSeg()+vZaehler();
   const today=todayISO();
   const rows=S.units.map(u=>({u,s:rentStatus(u,ui.month,S.txs,today)})).filter(r=>r.s&&r.s.st!=='none');
   const exp=rows.reduce((a,r)=>a+r.s.exp,0),got=rows.reduce((a,r)=>a+r.s.got,0),miss=rows.reduce((a,r)=>a+r.s.missing,0),pct=exp?Math.min(100,Math.round(got/exp*100)):0;
@@ -701,12 +702,12 @@ function unitDetail(id){
   const u=unitOf(id);if(!u)return;const today=todayISO();
   const months=[];for(let i=-11;i<=0;i++)months.push(addMonth(monthOf(today),i));
   const strip=u.rent>0?'<div class="strip">'+months.map(m=>{const s=rentStatus(u,m,S.txs,today);return '<span class="dot '+(s?s.st:'out')+'" title="'+esc(monthLabel(m)+': '+(s?LBL[s.st]:'nicht vermietet'))+'">'+MONTHS[+m.slice(5)-1].slice(0,1)+'</span>'}).join('')+'</div><p class="legend"><span class="dot paid"></span>bezahlt <span class="dot partial"></span>teilweise <span class="dot late"></span>überfällig</p>':'';
-  let warn='';if(u.contractEnd&&u.noticeMonths){const ym=addMonth(u.contractEnd.slice(0,7),-u.noticeMonths);const k=ym+'-'+pad(new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate());if(k>=today)warn='<div class="kv"><span>Kündigung spätestens</span><b>'+dfmt(k)+'</b></div>'}
+  let warn='';{const k=noticeBy(u);if(k&&k>=today)warn='<div class="kv"><span>Kündigung spätestens</span><b>'+dfmt(k)+'</b></div>'}
   const kv=(l,v)=>v?'<div class="kv"><span>'+l+'</span><b>'+v+'</b></div>':'';
-  modal('<div class="mhead"><div><h3>'+esc(unitLabel(u))+'</h3><small>'+esc(u.tenant||'Kein Mieter')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'+strip+'<div class="kvs">'+kv('Miete / Monat',u.rent?eur(u.rent):'')+kv('Fällig am',u.rent?u.dueDay+'. des Monats':'')+kv('Kaution',u.deposit?eur(u.deposit):'')+kv('Vertrag bis',dfmt(u.contractEnd))+warn+kv('IBAN',esc(u.iban))+'</div>'+(u.note?'<p class="note">'+esc(u.note)+'</p>':'')+docSection(u)+'<button class="wide" data-act="checklist" data-id="'+u.id+'">Mieterwechsel-Checkliste ›</button><div class="mact"><button class="danger" data-act="delUnit" data-id="'+u.id+'">Löschen</button><button class="primary" data-act="editUnit" data-id="'+u.id+'">Bearbeiten</button></div>');
+  modal('<div class="mhead"><div><h3>'+esc(unitLabel(u))+'</h3><small>'+esc(u.tenant||'Kein Mieter')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'+strip+'<div class="kvs">'+kv('Miete / Monat',u.rent?eur(u.rent):'')+kv('Fällig am',u.rent?u.dueDay+'. des Monats':'')+kv('Kaution',u.deposit?eur(u.deposit)+(u.depNote?' · '+esc(u.depNote):''):'')+kv('Vertrag bis',dfmt(curEnd(u)))+warn+kv('Verlängert sich um',+u.renew?(+u.renew)+' Monate':'')+kv('Beglaubigt',u.notar==='ja'?'Ja':u.notar==='nein'?'Nein':'')+kv('Rücklage pro Monat',+u.puffer?eur(+u.puffer):'')+kv('IBAN',esc(u.iban))+'</div>'+(u.note?'<p class="note">'+esc(u.note)+'</p>':'')+docSection(u)+'<button class="wide" data-act="checklist" data-id="'+u.id+'">Mieterwechsel-Checkliste ›</button><div class="mact"><button class="danger" data-act="delUnit" data-id="'+u.id+'">Löschen</button><button class="primary" data-act="editUnit" data-id="'+u.id+'">Bearbeiten</button></div>');
 }
 /* ---------- Immobilien: Unterbereiche ---------- */
-const IMMO_SEG=[['miete','Miete','g','<path d="M3 7h18v10H3zM7 12h.01M17 12h.01"/><circle cx="12" cy="12" r="2.2"/>'],['zaehler','Zähler','b','<path d="M4 16a8 8 0 1 1 16 0M12 16l4-5M3 20h18"/>'],['plan','Modernisierungsplan','o','<path d="M14 6l4 4-9 9H5v-4zM13 7l4 4M4 4l4 4M4 8l4-4"/>'],['ruecklage','Rücklagen','y','<path d="M4 12a7 5.5 0 0 1 14-1.5l2 .5v3l-2 .8a7 5.5 0 0 1-2 2.2V19h-3v-1.5h-2V19H8v-2a6 5 0 0 1-4-5zM9 8.5h3"/>'],['infos','Infos','v','<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>']];
+const IMMO_SEG=[['miete','Miete','g','<path d="M3 7h18v10H3zM7 12h.01M17 12h.01"/><circle cx="12" cy="12" r="2.2"/>'],['zaehler','Zähler','b','<path d="M4 16a8 8 0 1 1 16 0M12 16l4-5M3 20h18"/>'],['akte','Objekt-Akte','g','<path d="M4 5a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM8 12h8M8 16h5"/>'],['plan','Modernisierung','o','<path d="M14 6l4 4-9 9H5v-4zM13 7l4 4M4 4l4 4M4 8l4-4"/>'],['ruecklage','Rücklagen','y','<path d="M4 12a7 5.5 0 0 1 14-1.5l2 .5v3l-2 .8a7 5.5 0 0 1-2 2.2V19h-3v-1.5h-2V19H8v-2a6 5 0 0 1-4-5zM9 8.5h3"/>'],['infos','Infos','v','<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>']];
 const MICON={Wasser:'<path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/>',Strom:'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',Gas:'<path d="M12 3c1 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-4 3-6 1 2 2 3 3 3 0-3-1-5 0-8z"/>',Heizung:'<path d="M5 20V8M9 20V8M13 20V8M17 20V8M3 20h18M3 8h18"/>'};
 function vZaehler(){const L=S.meterDevs||[];
   return '<div class="h2row"><h3>Zähler für Wasser, Strom und Gas</h3><button class="primary" data-act="addMeterDev">+ Zähler</button></div><p class="hint">Tippe auf einen Zähler, um einen neuen Stand einzutragen.</p>'
@@ -906,7 +907,7 @@ function editUnit(id){
   if(!S.props.length){toast('Lege zuerst ein Objekt an.');return}
   const u=id?unitOf(id):{propertyId:S.props[0].id,name:'',tenant:'',rent:'',dueDay:5,iban:'',keywords:'',start:monthOf(todayISO()),end:'',deposit:'',contractEnd:'',noticeMonths:3,note:''};
   const n=v=>v===''||v==null||v===0?'':String(v).replace('.',',');
-  modal('<h3>'+(id?'Einheit bearbeiten':'Neue Einheit')+'</h3><div class="grid2"><label>Objekt<select id="f-prop">'+S.props.map(p=>'<option value="'+p.id+'"'+sel(p.id===u.propertyId)+'>'+esc(p.name)+'</option>').join('')+'</select></label><label>Bezeichnung<input id="f-name" value="'+esc(u.name)+'"></label><label>Mieter<input id="f-tenant" value="'+esc(u.tenant)+'"></label><label>Miete / Monat (€)<input id="f-rent" inputmode="decimal" value="'+n(u.rent)+'"></label><label>Fällig am Tag<input id="f-due" type="number" min="1" max="28" value="'+esc(u.dueDay||5)+'"></label><label>Kaution (€)<input id="f-dep" inputmode="decimal" value="'+n(u.deposit)+'"></label><label>Vertrag bis<input id="f-cend" type="date" value="'+esc(u.contractEnd)+'"></label><label>Kündigungsfrist (Monate)<input id="f-notice" type="number" min="0" max="24" value="'+esc(u.noticeMonths||3)+'"></label><label>Miete ab<input id="f-start" type="month" value="'+esc(u.start)+'"></label><label>Mietende (leer = läuft)<input id="f-end" type="month" value="'+esc(u.end)+'"></label><label>IBAN des Mieters<input id="f-iban" value="'+esc(u.iban)+'"></label><label>Suchwort im Umsatz<input id="f-kw" value="'+esc(u.keywords)+'" placeholder="z. B. Nachname"></label></div><label>Notiz<textarea id="f-note" rows="2">'+esc(u.note)+'</textarea></label><label>Wohnfläche (m², optional)<input id="f-sqm" inputmode="decimal" value="'+n(u.sqm)+'"></label><label>Anteil am Kaufpreis (€, optional)<input id="f-bshare" inputmode="decimal" value="'+n(u.buyShare)+'" placeholder="leer = nach Miete verteilt"></label><label>Vertrag bei der Porezna gemeldet?<select id="f-rpo"><option value="ok"'+sel(u.rpo!=='open')+'>Ja, erledigt oder vom Notar</option><option value="open"'+sel(u.rpo==='open')+'>Nein, muss ich noch einreichen</option></select></label><p class="hint">Kroatien: Mietvertrag innerhalb von 8 Tagen über <a href="https://e-porezna.porezna-uprava.hr" target="_blank" rel="noopener">ePorezna</a> → Zahtjevi → RPO mit Vertrag als Anhang. Bei Beglaubigung oder Solemnisierung meldet der Notar ihn selbst.</p><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveUnit" data-id="'+(id||'')+'">Speichern</button></div>');
+  modal('<h3>'+(id?'Einheit bearbeiten':'Neue Einheit')+'</h3><div class="grid2"><label>Objekt<select id="f-prop">'+S.props.map(p=>'<option value="'+p.id+'"'+sel(p.id===u.propertyId)+'>'+esc(p.name)+'</option>').join('')+'</select></label><label>Bezeichnung<input id="f-name" value="'+esc(u.name)+'"></label><label>Mieter<input id="f-tenant" value="'+esc(u.tenant)+'"></label><label>Miete / Monat (€)<input id="f-rent" inputmode="decimal" value="'+n(u.rent)+'"></label><label>Fällig am Tag<input id="f-due" type="number" min="1" max="28" value="'+esc(u.dueDay||5)+'"></label><label>Kaution (€)<input id="f-dep" inputmode="decimal" value="'+n(u.deposit)+'"></label><label>Vertrag bis<input id="f-cend" type="date" value="'+esc(u.contractEnd)+'"></label><label>Kündigungsfrist (Monate)<input id="f-notice" type="number" min="0" max="24" value="'+esc(u.noticeMonths||3)+'"></label><label>Verlängert sich um (Monate)<input id="f-renew" type="number" min="0" max="60" value="'+esc(u.renew||'')+'" placeholder="leer = endet"></label><label>Notiz zur Kaution<input id="f-depn" value="'+esc(u.depNote||'')+'"></label><label>Notariell beglaubigt?<select id="f-notar"><option value=""'+sel(!u.notar)+'>Unbekannt</option><option value="ja"'+sel(u.notar==='ja')+'>Ja</option><option value="nein"'+sel(u.notar==='nein')+'>Nein</option></select></label><label>Rücklage pro Monat (€)<input id="f-puf" inputmode="decimal" value="'+n(u.puffer)+'"></label><label>Miete ab<input id="f-start" type="month" value="'+esc(u.start)+'"></label><label>Mietende (leer = läuft)<input id="f-end" type="month" value="'+esc(u.end)+'"></label><label>IBAN des Mieters<input id="f-iban" value="'+esc(u.iban)+'"></label><label>Suchwort im Umsatz<input id="f-kw" value="'+esc(u.keywords)+'" placeholder="z. B. Nachname"></label></div><label>Notiz<textarea id="f-note" rows="2">'+esc(u.note)+'</textarea></label><label>Wohnfläche (m², optional)<input id="f-sqm" inputmode="decimal" value="'+n(u.sqm)+'"></label><label>Anteil am Kaufpreis (€, optional)<input id="f-bshare" inputmode="decimal" value="'+n(u.buyShare)+'" placeholder="leer = nach Miete verteilt"></label><label>Vertrag bei der Porezna gemeldet?<select id="f-rpo"><option value="ok"'+sel(u.rpo!=='open')+'>Ja, erledigt oder vom Notar</option><option value="open"'+sel(u.rpo==='open')+'>Nein, muss ich noch einreichen</option></select></label><p class="hint">Kroatien: Mietvertrag innerhalb von 8 Tagen über <a href="https://e-porezna.porezna-uprava.hr" target="_blank" rel="noopener">ePorezna</a> → Zahtjevi → RPO mit Vertrag als Anhang. Bei Beglaubigung oder Solemnisierung meldet der Notar ihn selbst.</p><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="saveUnit" data-id="'+(id||'')+'">Speichern</button></div>');
 }
 function manualDlg(kind){
   const cats=kind==='income'?S.icats:S.cats;
@@ -1100,7 +1101,7 @@ document.addEventListener('click',e=>{
     const buy=[];for(const i of [0,1,2]){const y=$('#f-by'+i).value.trim(),pr=$('#f-bp'+i).value.trim();if(!pr)continue;const n=parseDE(pr);if(isNaN(n)){toast('Betrag in Zeile '+(i+1)+' ist keine gültige Zahl.');return}buy.push({year:y,price:n,what:$('#f-bw'+i).value.trim()})}v.buy=buy;if(id)Object.assign(propOf(id),v);else S.props.push(Object.assign({id:uid()},v));closeModal();go();return}
   case 'saveUnit':{const name=$('#f-name').value.trim();if(!name){toast('Bitte eine Bezeichnung eingeben.');return}
     const num=s=>s.trim()===''?0:parseDE(s);const rent=num($('#f-rent').value),dep=num($('#f-dep').value);if(isNaN(rent)||isNaN(dep)){toast('Miete oder Kaution ist keine gültige Zahl.');return}
-    const v={propertyId:$('#f-prop').value,name,tenant:$('#f-tenant').value.trim(),rent,deposit:dep,dueDay:Math.min(28,Math.max(1,parseInt($('#f-due').value,10)||5)),contractEnd:$('#f-cend').value,noticeMonths:parseInt($('#f-notice').value,10)||0,start:$('#f-start').value,end:$('#f-end').value,iban:normIban($('#f-iban').value),keywords:$('#f-kw').value.trim(),note:$('#f-note').value.trim(),rpo:$('#f-rpo').value,buyShare:num($('#f-bshare').value),sqm:num($('#f-sqm').value)};if(isNaN(v.sqm)){toast('Wohnfläche ist keine gültige Zahl.');return}if(isNaN(v.buyShare)){toast('Anteil am Kaufpreis ist keine gültige Zahl.');return}
+    const v={propertyId:$('#f-prop').value,name,tenant:$('#f-tenant').value.trim(),rent,deposit:dep,dueDay:Math.min(28,Math.max(1,parseInt($('#f-due').value,10)||5)),contractEnd:$('#f-cend').value,noticeMonths:parseInt($('#f-notice').value,10)||0,start:$('#f-start').value,end:$('#f-end').value,iban:normIban($('#f-iban').value),keywords:$('#f-kw').value.trim(),note:$('#f-note').value.trim(),rpo:$('#f-rpo').value,buyShare:num($('#f-bshare').value),sqm:num($('#f-sqm').value),renew:parseInt($('#f-renew').value,10)||0,depNote:$('#f-depn').value.trim(),notar:$('#f-notar').value,puffer:num($('#f-puf').value)||0};if(isNaN(v.sqm)){toast('Wohnfläche ist keine gültige Zahl.');return}if(isNaN(v.buyShare)){toast('Anteil am Kaufpreis ist keine gültige Zahl.');return}
     if(id)Object.assign(unitOf(id),v);else S.units.push(Object.assign({id:uid()},v));closeModal();go();return}
   case 'delProp':{const p=propOf(id);ask('„'+p.name+'“ mit allen Einheiten löschen? Die Umsätze bleiben erhalten.','Löschen',()=>{const ids=S.units.filter(u=>u.propertyId===id).map(u=>u.id);S.txs.forEach(t=>{if(t.type==='rent'&&ids.includes(t.unitId)){t.type='open';t.unitId=''}if(t.propertyId===id)t.propertyId=''});S.units=S.units.filter(u=>u.propertyId!==id);S.props=S.props.filter(x=>x.id!==id);go()});return}
   case 'delUnit':{const u=unitOf(id);ask('„'+unitLabel(u)+'“ löschen? Zugeordnete Mieten werden wieder offen.','Löschen',()=>{S.txs.forEach(t=>{if(t.type==='rent'&&t.unitId===id){t.type='open';t.unitId=''}});S.units=S.units.filter(x=>x.id!==id);go()});return}
@@ -1662,7 +1663,7 @@ async function api(path,opt){let r;try{r=await fetch(SRV+path,Object.assign({},o
   let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw {code:j.error||('HTTP_'+r.status),status:r.status,version:j.version};return j}
 function authErr(e){const c=e&&e.code;return ({NETWORK:'Keine Verbindung zum Server. Prüfe das Internet.',WRONG_LOGIN:'E-Mail oder Passwort stimmt nicht.',WRONG_CODE:'E-Mail oder Wiederherstellungscode stimmt nicht.',TOO_MANY:'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.',NOT_INVITED:'Für diese E-Mail-Adresse ist die Registrierung nicht freigeschaltet.',EXISTS:'Für diese E-Mail gibt es schon ein Konto. Bitte anmelden.',NO_DATABASE:'Beim Server fehlt die Datenbank (Bindung DB).',FORBIDDEN_ORIGIN:'Der Server erlaubt diese App-Adresse nicht (ALLOWED_ORIGIN).'})[c]||('Fehler'+(c?' ('+c+')':'')+'.')}
 /* --- Zustand für den Tresor --- */
-const ARR_KEYS=['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes','docs','credits'];
+const ARR_KEYS=['props','units','txs','rules','accounts','plans','fixcosts','devices','meterDevs','notes','reminders','wishes','docs','credits','repairs'];
 function exportS(){const o=JSON.parse(JSON.stringify(S));if(o.settings)delete o.settings.lock;delete o._t;return o}
 const hasData=s=>!!s&&ARR_KEYS.some(k=>Array.isArray(s[k])&&s[k].length);
 function mergeInto(local,server){/* Neues vom anderen Gerät übernehmen, eigene Änderungen behalten */
@@ -2085,7 +2086,7 @@ function acctPage(){const LI=loggedIn(),st=S.settings||{},nm=st.owner||(LI?acct.
     +row('globe','c3','Sprache','Language · Jezik','<select id="f-lang" aria-label="Sprache">'+[['auto','Automatisch'],['de','Deutsch'],['en','English'],['hr','Hrvatski']].map(([v,t])=>'<option value="'+v+'"'+sel((st.lang||'auto')===v)+'>'+t+'</option>').join('')+'</select>')
     +row('user','c3','Name im Jahresbericht',esc(st.owner||'Noch nicht eingetragen'),'<span class="chev">›</span>','ownerDlg')+'</section>';
   h+='<div class="sgh">Backup</div><section class="sbox">'+row('cloud','c2','Letztes Backup',st.lastBackup?dfmt(st.lastBackup)+' · '+(daysTo(st.lastBackup)===0?'heute':'vor '+(-daysTo(st.lastBackup))+(daysTo(st.lastBackup)===-1?' Tag':' Tagen')):(LI?'Deine Daten werden verschlüsselt synchronisiert. Ein Backup schadet trotzdem nicht.':'Noch keins. Die Daten liegen nur auf diesem Gerät.'),'')
-    +'<div class="form sbtn"><button data-act="copyBackup">↓ Speichern</button><button data-act="restoreDlg">↑ Einspielen</button></div></section>';
+    +'<div class="form sbtn"><button data-act="copyBackup">↓ Speichern</button><button data-act="restoreDlg">↑ Einspielen</button></div>'+row('bill','c1','Aus Datei ergänzen','Fehlende Daten aus einer Datei dazunehmen, z. B. aus Excel','<span class="chev">›</span>','mergeDlg')+'</section>';
   if(LI)h+='<button class="logout" data-act="logout">Abmelden</button>';
   return h}
 function remPage(){return '<div class="h2row remtop"><span class="hint">Eigene Termine und was die App selbst erkennt.</span><button class="primary plus" data-act="addRem" aria-label="Neue Erinnerung">+</button></div>'+remRows()
@@ -2131,3 +2132,144 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(
   else if(a==='copyMcode'){const t=$('#f-mcode');(navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>toast('Code kopiert.')).catch(()=>{t.select();document.execCommand('copy');toast('Code kopiert.')})}
 });
 I18N.push(['Ausgangsrechnungen · Excel','Outgoing invoices · Excel','Izlazni računi · Excel'],['Jetzt abgleichen','Sync now','Uskladi sada'],['Neuen Excel-Link','New Excel link','Nova Excel poveznica'],['Ausschalten','Turn off','Isključi'],['Excel verbinden','Connect Excel','Poveži Excel'],['Code kopieren','Copy code','Kopiraj kod']);
+
+/* ---------- Objekt-Akte: Verträge, Kautionen, Nebenkosten, Reparaturen, Geräte, Zähler ---------- */
+function addDate(d,n){const ym=addMonth(d.slice(0,7),n),last=new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate();return ym+'-'+pad(Math.min(+d.slice(8,10),last))}
+function curEnd(u){const c=u&&u.contractEnd;if(!c)return '';const r=+u.renew||0,T=todayISO();if(!r||c>=T)return c;let e=c;for(let k=1;k<600;k++){e=addDate(c,r*k);if(e>=T)break}return e}
+function noticeBy(u){const e=curEnd(u);return e&&+u.noticeMonths?addDate(e,-u.noticeMonths):''}
+function contractState(u){if(!u.contractEnd)return {t:'kein Datum',c:'pending'};const k=noticeBy(u);if(!k)return {t:'ok',c:'paid'};const d=daysTo(k);
+  if(d<0)return +u.renew?{t:'verlängert sich',c:'over'}:{t:'Frist vorbei',c:'over'};if(d<=30)return {t:'jetzt kündigen',c:'late'};if(d<=90)return {t:'Entscheidung fällig',c:'partial'};return {t:'ok',c:'paid'}}
+const nkey=s=>nrm(s).replace(/[^a-z0-9]/g,'');
+const repOf=pid=>(S.repairs||[]).filter(r=>r.propertyId===pid);
+function akteP(){return propOf(ui.akteProp)||S.props[0]}
+function vAkte(){
+  if(!S.props.length)return '<div class="empty">Lege zuerst unter „Miete“ ein Objekt an.</div>';
+  const p=akteP(),U=S.units.filter(u=>u.propertyId===p.id),cy=+todayISO().slice(0,4);
+  const chips=S.props.length>1?'<div class="pchips" role="tablist">'+S.props.map(x=>'<button role="tab" data-act="akteProp" data-id="'+x.id+'"'+(x.id===p.id?' class="on" aria-selected="true"':'')+'>'+esc(x.name)+'</button>').join('')+'</div>':'';
+  /* Verträge & Kautionen */
+  const depSum=U.reduce((s,u)=>s+(+u.deposit||0),0);
+  const con=U.length?U.map(u=>{const st=contractState(u),ce=curEnd(u),k=noticeBy(u);
+    return '<button class="akc" data-act="unit" data-id="'+u.id+'"><span class="akh"><b>'+esc(u.name)+'</b><span class="pill '+st.c+'">'+st.t+'</span></span>'
+      +'<small>'+esc(u.tenant||'Kein Mieter')+(u.rent?' · '+eur(+u.rent)+' / Monat':'')+'</small>'
+      +'<span class="akg"><span><i>Kaution</i><b class="num">'+(u.deposit?eur(+u.deposit):'–')+'</b>'+(u.depNote?'<em>'+esc(u.depNote)+'</em>':'')+'</span>'
+      +'<span><i>Vertrag bis</i><b>'+(ce?dfmt(ce):'–')+'</b>'+(ce&&+u.renew?'<em>danach + '+(+u.renew)+' Monate</em>':'')+'</span>'
+      +'<span><i>Kündigen bis</i><b>'+(k?dfmt(k):'–')+'</b>'+(+u.noticeMonths?'<em>Frist '+(+u.noticeMonths)+' Monate</em>':'')+'</span>'
+      +'<span><i>Beglaubigt</i><b>'+(u.notar==='ja'?'Ja':u.notar==='nein'?'Nein':'offen')+'</b></span></span></button>'}).join('')
+    :'<div class="empty sm">Noch keine Einheit in diesem Objekt.</div>';
+  /* Fixe Nebenkosten */
+  const F=(S.fixcosts||[]).filter(f=>f.propertyId===p.id),fy=F.reduce((s,f)=>s+f.amount*f.perYear,0);
+  const fix='<div class="elist akbox">'+(F.length?F.map(f=>'<div class="erow"><span><b>'+esc(f.title)+'</b><small>'+eur(f.amount)+' '+(f.perYear===12?'monatlich':f.perYear===1?'jährlich':f.perYear+'× im Jahr')+'</small></span><span class="num">'+eur(Math.round(f.amount*f.perYear))+' <button class="small link" data-act="delFix" data-id="'+f.id+'" aria-label="Löschen">×</button></span></div>').join(''):'<div class="empty sm">Noch keine fixen Nebenkosten.</div>')+'<div class="form pad"><button data-act="addFix" data-id="'+p.id+'">+ Fixkosten</button></div></div>';
+  /* Reparaturen */
+  const R=repOf(p.id),ys=[...new Set(R.map(r=>+r.date.slice(0,4)).concat(cy))].sort((a,b)=>b-a),y=ys.includes(+ui.akteYear)?+ui.akteYear:cy;
+  const RY=R.filter(r=>+r.date.slice(0,4)===y),tot=RY.reduce((s,r)=>s+(+r.amount||0),0),ins=RY.reduce((s,r)=>s+(+r.ins||0),0);
+  const ychips='<div class="pchips sm">'+ys.map(v=>{const s=R.filter(r=>+r.date.slice(0,4)===v).reduce((a,r)=>a+(+r.amount||0),0);return '<button data-act="akteYear" data-v="'+v+'"'+(v===y?' class="on"':'')+'>'+v+(s?' <i class="num">'+eur(s)+'</i>':'')+'</button>'}).join('')+'</div>';
+  const places=U.map(u=>({id:u.id,n:u.name})).concat([{id:'',n:'Haus allgemein'}]);
+  const rep=places.map(pl=>{const l=RY.filter(r=>pl.id?r.unitId===pl.id:!U.some(u=>u.id===r.unitId)).sort((a,b)=>a.date.localeCompare(b.date));if(!l.length)return '';
+    return '<div class="akrep"><div class="akrh"><b>'+esc(pl.n)+'</b><span class="num">'+eur(l.reduce((s,r)=>s+(+r.amount||0),0))+'</span></div>'+l.map(r=>'<button class="akrr" data-act="repEdit" data-id="'+r.id+'"><span class="akm">'+MONTHS[+r.date.slice(5,7)-1].slice(0,3)+'</span><span class="akt">'+esc(r.title)+(+r.ins?' <i class="chip2">Versicherung '+eur(+r.ins)+'</i>':'')+'</span><span class="num">'+eur(+r.amount||0)+'</span></button>').join('')+'</div>'}).join('');
+  const repBox=(rep||'<div class="empty sm">Keine Reparaturen in '+y+'.</div>')+(RY.length?'<div class="kvs aksum"><div class="kv"><span>Gesamt '+y+'</span><b class="num">'+eur(tot)+'</b></div>'+(ins?'<div class="kv"><span>Versicherung hat gezahlt</span><b class="num pos">'+eur(ins)+'</b></div><div class="kv"><span>Bleibt bei dir</span><b class="num">'+eur(tot-ins)+'</b></div>':'')+'</div>':'');
+  /* Rücklage */
+  const PU=U.filter(u=>+u.puffer>0),pm=PU.reduce((s,u)=>s+(+u.puffer),0),r=S.reserve;
+  const res='<div class="elist akbox">'+(PU.length?PU.map(u=>'<div class="erow"><span><b>'+esc(u.name)+'</b><small>Rücklage pro Monat</small></span><span class="num">'+eur(+u.puffer)+'</span></div>').join('')+'<div class="erow"><span><b>Zusammen im Jahr</b></span><span class="num">'+eur(pm*12)+'</span></div>':'<div class="empty sm">Noch keine Rücklage pro Einheit eingetragen. Das geht beim Bearbeiten der Einheit.</div>')
+    +(r&&r.target?'<div class="erow"><span><b>Plan für alle Objekte</b><small>'+eur(+r.yearly||0)+' im Jahr ab '+esc(r.startYear)+' · Ziel '+eur(+r.target)+'</small></span></div>':'')+'<div class="form pad"><button data-act="immo" data-v="ruecklage">Zum Rücklagen-Plan ›</button></div></div>';
+  /* Geräte */
+  const dev=U.map(u=>{const L=(S.devices||[]).filter(d=>d.unitId===u.id);return '<details class="obj"><summary><span class="it"><strong>'+esc(u.name)+'</strong><small>'+(L.length?L.length+(L.length===1?' Eintrag':' Einträge'):'Noch keine Geräte')+'</small></span><span class="chev">›</span></summary><div class="elist">'+L.map(d=>'<div class="erow"><span><b>'+esc(d.name)+'</b></span><span class="num">'+esc(d.year)+' <button class="small link" data-act="delDev" data-id="'+d.id+'" aria-label="Löschen">×</button></span></div>').join('')+'</div><div class="form pad"><button data-act="addDev" data-id="'+u.id+'">+ Gerät</button></div></details>'}).join('')||'<div class="empty sm">Noch keine Einheit in diesem Objekt.</div>';
+  /* Zähler */
+  const M=(S.meterDevs||[]).filter(m=>m.propertyId===p.id).sort((a,b)=>a.kind.localeCompare(b.kind)||(a.place||'').localeCompare(b.place||'','de',{numeric:true}));
+  const met=M.length?'<div class="list">'+M.map(m=>'<button class="item plan" data-act="meter" data-id="'+m.id+'"><span class="picon mk-'+(MKIND[m.kind]||'')+'" aria-hidden="true"><svg viewBox="0 0 24 24">'+(MICON[m.kind]||MICON.Wasser)+'</svg></span><span class="it"><strong>'+esc(m.kind)+' · '+esc(m.place||'')+'</strong><small>'+[m.number?'Nr. '+esc(m.number):'',m.omm?'OMM '+esc(m.omm):'',m.account?'Vertragskonto '+esc(m.account):'',m.code?'Šifra '+esc(m.code):''].filter(Boolean).join(' · ')+((m.number||m.omm)?'':'Zählernummer fehlt')+'</small></span><span class="chev">›</span></button>').join('')+'</div>':'<div class="empty sm">Noch keine Zähler für dieses Objekt.</div>';
+  const sec=(n,c,t,sub,body,btn)=>'<section class="aksec"><div class="akt1"><span class="sno '+c+'">'+n+'</span><span class="it"><strong>'+t+'</strong>'+(sub?'<small>'+sub+'</small>':'')+'</span>'+(btn||'')+'</div>'+body+'</section>';
+  return '<div class="h2row"><h3>Objekt-Akte</h3></div>'+chips
+    +sec(1,'s1','Verträge & Kautionen',U.length?'Kautionen zusammen '+eur(depSum):'','<div class="aklist">'+con+'</div>')
+    +sec(2,'s2','Fixe Nebenkosten',F.length?eur(Math.round(fy))+' im Jahr · '+eur(Math.round(fy/12))+' im Monat':'',fix)
+    +sec(3,'s3','Reparaturen',R.length?'pro Einheit und Jahr':'',ychips+repBox,'<button class="small" data-act="repAdd">+ Reparatur</button>')
+    +sec(4,'s1','Rücklage',pm?eur(pm)+' im Monat':'',res)
+    +sec(5,'s2','Gekaufte Geräte','',dev)
+    +sec(6,'s3','Zähler',M.length?M.length+' Zähler':'',met,'<button class="small" data-act="addMeterDev">+ Zähler</button>');
+}
+function repDlg(id){const p=akteP(),r=id?(S.repairs||[]).find(x=>x.id===id):{propertyId:p.id,unitId:'',date:monthOf(todayISO()),title:'',amount:'',ins:''};if(!r)return;
+  const n=v=>v===''||v==null||v===0?'':String(v).replace('.',','),U=S.units.filter(u=>u.propertyId===r.propertyId);
+  modal('<h3>'+(id?'Reparatur bearbeiten':'Neue Reparatur')+'</h3><label>Was wurde gemacht?<input id="f-rpt" value="'+esc(r.title)+'" placeholder="z. B. Neuer Boiler"></label><div class="grid2"><label>Einheit<select id="f-rpu"><option value="">Haus allgemein</option>'+U.map(u=>'<option value="'+u.id+'"'+sel(u.id===r.unitId)+'>'+esc(u.name)+'</option>').join('')+'</select></label><label>Monat<input id="f-rpd" type="month" value="'+esc(r.date)+'"></label><label>Kosten (€)<input id="f-rpa" inputmode="decimal" value="'+n(r.amount)+'"></label><label>Davon zahlte die Versicherung (€)<input id="f-rpi" inputmode="decimal" value="'+n(r.ins)+'"></label></div><div class="mact">'+(id?'<button class="danger" data-act="repDel" data-id="'+id+'">Löschen</button>':'')+'<button data-act="close">Abbrechen</button><button class="primary" data-act="repSave" data-id="'+(id||'')+'" data-p="'+r.propertyId+'">Speichern</button></div>')}
+
+/* ---------- Daten ergänzen (Datei, z. B. aus Excel) ---------- */
+var mrg=null;
+function mergeDlg(){modal('<h3>Daten ergänzen</h3><p class="hint">Ergänzt Daten aus einer Datei, zum Beispiel aus deiner Excel-Tabelle. Was schon in der App steht, bleibt unverändert. Du siehst vorher, was neu dazukommt.</p><input type="file" id="f-mgfile" accept=".json,application/json,text/plain"><div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="mergeLoad">Weiter</button></div>')}
+function mergeGuess(){const d=mrg.d,mp=mrg.map={props:{},units:{}};
+  (d.props||[]).forEach(ip=>{let re=null;try{re=new RegExp(ip.match||nkey(ip.name),'i')}catch(e){}const hit=S.props.find(p=>re&&re.test(nrm(p.name+' '+(p.address||''))));mp.props[ip.key]=hit?hit.id:'new'});
+  (d.units||[]).forEach(iu=>{const pid=mp.props[iu.prop];if(!pid||pid==='new'){mp.units[iu.key]='new';return}const C=S.units.filter(u=>u.propertyId===pid),taken=new Set(Object.values(mp.units));let re=null;try{re=new RegExp(iu.match||nkey(iu.name),'i')}catch(e){}
+    let hit=C.find(u=>!taken.has(u.id)&&re&&re.test(nrm(u.name)));
+    if(!hit&&iu.tenant){const t=C.filter(u=>!taken.has(u.id)&&u.tenant&&nkey(u.tenant).includes(nkey(iu.tenant).slice(0,5)));if(t.length===1)hit=t[0]}
+    if(!hit&&C.length===1&&(d.units||[]).filter(x=>x.prop===iu.prop).length===1)hit=C[0];
+    mp.units[iu.key]=hit?hit.id:'new'})}
+const UF=['tenant','rent','deposit','depNote','contractEnd','noticeMonths','renew','notar','puffer'];
+function mergePlan(){const d=mrg.d,mp=mrg.map,G=[];const pid=k=>mp.props[k],uidOf=k=>mp.units[k],isNew=v=>!v||v==='new';
+  const g=(k,label,neu,old,note)=>G.push({k,label,neu,old,note:note||''});
+  const np=(d.props||[]).filter(p=>isNew(pid(p.key))),nu=(d.units||[]).filter(u=>isNew(uidOf(u.key)));
+  g('struct','Objekte & Einheiten',np.concat(nu),(d.props||[]).length+(d.units||[]).length-np.length-nu.length);
+  const fill=[];let kept=0;(d.units||[]).forEach(iu=>{if(isNew(uidOf(iu.key)))return;const u=unitOf(uidOf(iu.key));const f=UF.filter(k=>k!=='puffer'&&iu[k]!=null&&iu[k]!==''&&(u[k]==null||u[k]===''||u[k]===0));if(f.length)fill.push({iu,u,f});else kept++});
+  g('contracts','Verträge & Kautionen',fill.concat(nu.filter(x=>x.contractEnd||x.deposit||x.tenant)),kept);
+  const fx=(d.fixcosts||[]).filter(f=>isNew(pid(f.prop))||!(S.fixcosts||[]).some(x=>x.propertyId===pid(f.prop)&&nkey(x.title)===nkey(f.title)));g('fix','Fixe Nebenkosten',fx,(d.fixcosts||[]).length-fx.length);
+  const rp=(d.repairs||[]).filter(r=>isNew(pid(r.prop))||(r.unit&&isNew(uidOf(r.unit)))||!(S.repairs||[]).some(x=>x.propertyId===pid(r.prop)&&(x.unitId||'')===(r.unit?uidOf(r.unit):'')&&x.date===r.date&&nkey(x.title)===nkey(r.title)));g('rep','Reparaturen',rp,(d.repairs||[]).length-rp.length);
+  const rs=[];if(d.reserve&&!(S.reserve&&+S.reserve.target))rs.push({plan:1});(d.units||[]).forEach(iu=>{if(iu.puffer==null)return;const u=isNew(uidOf(iu.key))?null:unitOf(uidOf(iu.key));if(!u||!(+u.puffer))rs.push({iu})});
+  g('res','Rücklagen-Plan',rs,(d.reserve?1:0)+(d.units||[]).filter(x=>x.puffer!=null).length-rs.length);
+  const dv=(d.devices||[]).filter(x=>isNew(uidOf(x.unit))||!(S.devices||[]).some(e=>e.unitId===uidOf(x.unit)&&nkey(e.name)===nkey(x.name)));g('dev','Gekaufte Geräte',dv,(d.devices||[]).length-dv.length);
+  const dig=s=>String(s||'').replace(/\D/g,'');
+  const mt=(d.meters||[]).filter(m=>isNew(pid(m.prop))||!(S.meterDevs||[]).some(e=>e.propertyId===pid(m.prop)&&((dig(m.number)&&dig(e.number)===dig(m.number))||(m.omm&&e.omm===m.omm)||(!dig(m.number)&&!m.omm&&e.kind===m.kind&&nkey(e.place)===nkey(m.place)))));g('met','Zähler',mt,(d.meters||[]).length-mt.length);
+  const pl=(d.plans||[]).filter(x=>isNew(pid(x.prop))||!(S.plans||[]).some(e=>e.propertyId===pid(x.prop)&&nkey(e.title)===nkey(x.title)));g('plan','Modernisierungsplan',pl,(d.plans||[]).length-pl.length,(S.plans||[]).length&&pl.length?'Die App hat schon einen Plan. Nur ankreuzen, wenn diese Einträge wirklich fehlen.':'');
+  const nt=(d.notes||[]).filter(x=>!(S.notes||[]).some(e=>nkey(e.title)===nkey(x.title)));g('note','Notizen',nt,(d.notes||[]).length-nt.length,(S.notes||[]).length&&nt.length?'Die App hat schon Notizen. Nur ankreuzen, wenn diese wirklich fehlen.':'');
+  G.forEach(x=>{if(mrg.on[x.k]==null)mrg.on[x.k]=x.neu.length>0&&!x.note});
+  return G}
+function mergePreview(){const d=mrg.d,mp=mrg.map,G=mergePlan();
+  const pmap=(d.props||[]).map(ip=>'<div class="mgp"><label><span>'+esc(ip.name)+'</span><select data-mgp="'+esc(ip.key)+'"><option value="new">Neu anlegen</option>'+S.props.map(p=>'<option value="'+p.id+'"'+sel(mp.props[ip.key]===p.id)+'>'+esc(p.name)+'</option>').join('')+'</select></label>'
+    +(d.units||[]).filter(u=>u.prop===ip.key).map(iu=>{const pid=mp.props[ip.key],C=pid&&pid!=='new'?S.units.filter(u=>u.propertyId===pid):[];return '<label class="mgu"><span>'+esc(iu.name)+'</span><select data-mgu="'+esc(iu.key)+'"><option value="new">Neu anlegen</option>'+C.map(u=>'<option value="'+u.id+'"'+sel(mp.units[iu.key]===u.id)+'>'+esc(u.name)+(u.tenant?' ('+esc(u.tenant)+')':'')+'</option>').join('')+'</select></label>'}).join('')+'</div>').join('');
+  const n=G.filter(x=>mrg.on[x.k]&&x.k!=='struct').reduce((s,x)=>s+x.neu.length,0)+G[0].neu.length;
+  modal('<div class="mhead"><div><h3>Daten ergänzen</h3><small>'+esc(d.source||'Datei')+'</small></div><button class="ic" data-act="close" aria-label="Schließen">×</button></div>'
+    +'<h4 class="mgh">1. Wohin gehört was?</h4><p class="hint">Links steht der Name aus der Datei, rechts dein Objekt oder deine Einheit in der App. Bitte kurz prüfen.</p>'+pmap
+    +'<h4 class="mgh">2. Was kommt dazu?</h4><div class="mgl">'+G.filter(x=>x.k!=='struct').map(x=>'<label class="mgr'+(x.neu.length?'':' dim')+'"><input type="checkbox" data-mgon="'+x.k+'"'+(mrg.on[x.k]&&x.neu.length?' checked':'')+(x.neu.length?'':' disabled')+'><span class="it"><strong>'+x.label+'</strong><small>'+(x.neu.length?x.neu.length+' neu':'nichts Neues')+(x.old?' · '+x.old+' schon da':'')+'</small>'+(x.note?'<small class="warn">'+x.note+'</small>':'')+'</span></label>').join('')+'</div>'
+    +(G[0].neu.length?'<p class="hint">Es werden angelegt: '+G[0].neu.map(x=>esc(x.name)).join(', ')+'.</p>':'')
+    +'<div class="mact"><button data-act="close">Abbrechen</button><button class="primary" data-act="mergeApply"'+(n?'':' disabled')+'>'+(n?n+' Einträge ergänzen':'Nichts zu ergänzen')+'</button></div>')}
+function mergeApply(){const d=mrg.d,mp=mrg.map,G=mergePlan(),on=k=>mrg.on[k],grp=k=>G.find(x=>x.k===k);let cnt=0;
+  const need=new Set(),needU=new Set();
+  const use=(k,arr)=>on(k)?grp(k).neu:[];
+  (d.units||[]).forEach(iu=>{if(mp.units[iu.key]==='new')needU.add(iu.key)});
+  /* Objekte und Einheiten nur anlegen, wenn etwas an ihnen hängt oder sie ausdrücklich neu sind */
+  (d.props||[]).forEach(ip=>{if(mp.props[ip.key]==='new'){const p={id:uid(),name:ip.name,address:ip.address||'',country:ip.country||'HR',buy:[]};S.props.push(p);mp.props[ip.key]=p.id;cnt++}});
+  (d.units||[]).forEach(iu=>{if(mp.units[iu.key]==='new'){const u={id:uid(),propertyId:mp.props[iu.prop],name:iu.name,tenant:'',rent:0,dueDay:5,iban:'',keywords:'',start:'',end:'',deposit:0,contractEnd:'',noticeMonths:3,note:''};
+      if(on('contracts'))UF.forEach(k=>{if(k!=='puffer'&&iu[k]!=null&&iu[k]!=='')u[k]=iu[k]});if(u.rent&&!u.start)u.start=monthOf(todayISO());if(iu.note)u.note=iu.note;S.units.push(u);mp.units[iu.key]=u.id;cnt++}});
+  use('contracts').forEach(x=>{if(x.u&&x.f){x.f.forEach(k=>x.u[k]=x.iu[k]);cnt++}});
+  use('fix').forEach(f=>{S.fixcosts.push({id:uid(),propertyId:mp.props[f.prop],title:f.title,amount:f.amount,perYear:f.perYear});cnt++});
+  S.repairs=S.repairs||[];use('rep').forEach(r=>{S.repairs.push({id:uid(),propertyId:mp.props[r.prop],unitId:r.unit?mp.units[r.unit]:'',date:r.date,title:r.title,amount:r.amount,ins:r.ins||0});cnt++});
+  use('res').forEach(x=>{if(x.plan){S.reserve=Object.assign({special:{}},S.reserve||{},d.reserve);cnt++}else{const u=unitOf(mp.units[x.iu.key]);if(u){u.puffer=x.iu.puffer;cnt++}}});
+  use('dev').forEach(x=>{S.devices.push({id:uid(),unitId:mp.units[x.unit],name:x.name,year:x.year});cnt++});
+  use('met').forEach(m=>{S.meterDevs.push({id:uid(),propertyId:mp.props[m.prop],kind:m.kind,number:m.number||'',place:m.place||'',omm:m.omm||'',account:m.account||'',code:m.code||'',note:m.note||'',readings:[]});cnt++});
+  use('plan').forEach(x=>{S.plans.push({id:uid(),propertyId:mp.props[x.prop],title:x.title,prio:x.prio||'Mittel',year:x.year||null,est:x.est==null?null:x.est,act:null,status:x.status||'Geplant',note:x.note||''});cnt++});
+  use('note').forEach(x=>{S.notes.push({id:uid(),title:x.title,text:x.text||''});cnt++});
+  if(S.settings&&S.settings.immo===false)S.settings.immo=true;
+  mrg=null;closeModal();save();ui.immo='akte';saveUi();if(location.hash!=='#immo')location.hash='#immo';else render();toast(cnt+' Einträge ergänzt.')}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,id=b.dataset.id;
+  if(a==='akteProp'){ui.akteProp=id;saveUi();render()}
+  else if(a==='akteYear'){ui.akteYear=+b.dataset.v;saveUi();render()}
+  else if(a==='repAdd')repDlg();
+  else if(a==='repEdit')repDlg(id);
+  else if(a==='repDel'){S.repairs=(S.repairs||[]).filter(x=>x.id!==id);closeModal();save();render()}
+  else if(a==='repSave'){const t=$('#f-rpt').value.trim(),am=parseDE($('#f-rpa').value),iv=$('#f-rpi').value.trim(),ins=iv===''?0:parseDE(iv),dt=$('#f-rpd').value;
+    if(!t){toast('Bitte eintragen, was gemacht wurde.');return}if(isNaN(am)||isNaN(ins)){toast('Bitte einen gültigen Betrag eingeben.');return}if(!/^\d{4}-\d{2}$/.test(dt)){toast('Bitte den Monat wählen.');return}
+    const v={unitId:$('#f-rpu').value,date:dt,title:t,amount:am,ins};S.repairs=S.repairs||[];if(id)Object.assign(S.repairs.find(x=>x.id===id),v);else S.repairs.push(Object.assign({id:uid(),propertyId:b.dataset.p},v));ui.akteYear=+dt.slice(0,4);saveUi();closeModal();save();render()}
+  else if(a==='mergeDlg')mergeDlg();
+  else if(a==='mergeLoad'){const f=$('#f-mgfile').files[0];if(!f){toast('Bitte eine Datei auswählen.');return}f.text().then(t=>{let x;try{x=JSON.parse(t)}catch(err){toast('Die Datei kann nicht gelesen werden.');return}
+      if(!x||x.app!=='djc-merge'){toast('Das ist keine Ergänzungs-Datei. Ein Backup spielst du über „Einspielen“ ein.');return}mrg={d:x,map:null,on:{}};mergeGuess();mergePreview()})}
+  else if(a==='mergeApply'){if(mrg)mergeApply()}
+});
+document.addEventListener('change',e=>{const t=e.target;if(!mrg||!t||!t.dataset)return;
+  if(t.dataset.mgp){mrg.map.props[t.dataset.mgp]=t.value;(mrg.d.units||[]).filter(u=>u.prop===t.dataset.mgp).forEach(u=>mrg.map.units[u.key]='new');
+    if(t.value!=='new'){const keep=Object.assign({},mrg.map.props);mergeGuess();Object.assign(mrg.map.props,keep);(mrg.d.units||[]).forEach(u=>{if(mrg.map.props[u.prop]==='new')mrg.map.units[u.key]='new'})}mrg.on={};mergePreview()}
+  else if(t.dataset.mgu){mrg.map.units[t.dataset.mgu]=t.value;mrg.on={};mergePreview()}
+  else if(t.dataset.mgon){mrg.on[t.dataset.mgon]=t.checked;mergePreview()}
+});
+I18N.push(['Objekt-Akte','Property file','Dosje objekta'],['Verträge & Kautionen','Contracts & deposits','Ugovori i polozi'],['Fixe Nebenkosten','Fixed running costs','Fiksne režije'],['Reparaturen','Repairs','Popravci'],['Rücklage','Reserve','Pričuva'],['Gekaufte Geräte','Purchased appliances','Kupljeni uređaji'],
+['Vertrag bis','Contract until','Ugovor do'],['Kündigen bis','Give notice by','Otkazati do'],['Beglaubigt','Notarised','Ovjeren'],['offen','open','otvoreno'],['kein Datum','no date','nema datuma'],['verlängert sich','renews','produljuje se'],['Frist vorbei','deadline passed','rok prošao'],['jetzt kündigen','give notice now','otkaži sada'],['Entscheidung fällig','decision due','potrebna odluka'],['ok','ok','ok'],
+['Kautionen zusammen {n}','Deposits in total {n}','Polozi ukupno {n}'],['danach + {n} Monate','then + {n} months','zatim + {n} mjeseci'],['Frist {n} Monate','{n} months notice','rok {n} mjeseca'],['{n} im Jahr · {n} im Monat','{n} per year · {n} per month','{n} godišnje · {n} mjesečno'],['{n} im Monat','{n} per month','{n} mjesečno'],
+['pro Einheit und Jahr','per unit and year','po jedinici i godini'],['+ Reparatur','+ Repair','+ Popravak'],['Haus allgemein','Building in general','Kuća općenito'],['Keine Reparaturen in {n}.','No repairs in {n}.','Nema popravaka u {n}.'],['Gesamt {n}','Total {n}','Ukupno {n}'],['Versicherung hat gezahlt','Insurance paid','Osiguranje platilo'],['Bleibt bei dir','Your share','Ostaje tebi'],['Versicherung {n}','Insurance {n}','Osiguranje {n}'],
+['Rücklage pro Monat','Reserve per month','Pričuva mjesečno'],['Zusammen im Jahr','Together per year','Ukupno godišnje'],['Plan für alle Objekte','Plan for all properties','Plan za sve objekte'],['Zum Rücklagen-Plan ›','To the reserve plan ›','Na plan pričuve ›'],['Noch keine Geräte','No appliances yet','Još nema uređaja'],['Zählernummer fehlt','Meter number missing','Nedostaje broj brojila'],['{n} Zähler','{n} meters','{n} brojila'],
+['Neue Reparatur','New repair','Novi popravak'],['Reparatur bearbeiten','Edit repair','Uredi popravak'],['Was wurde gemacht?','What was done?','Što je napravljeno?'],['Monat','Month','Mjesec'],['Kosten (€)','Cost (€)','Trošak (€)'],['Davon zahlte die Versicherung (€)','Of which insurance paid (€)','Od toga platilo osiguranje (€)'],
+['Daten ergänzen','Add data','Dopuni podatke'],['Weiter','Next','Dalje'],['Neu anlegen','Create new','Dodaj novo'],['1. Wohin gehört was?','1. What belongs where?','1. Što kamo spada?'],['2. Was kommt dazu?','2. What is added?','2. Što se dodaje?'],['Rücklagen-Plan','Reserve plan','Plan pričuve'],['Notizen','Notes','Bilješke'],['Objekte & Einheiten','Properties & units','Objekti i jedinice'],['Nichts zu ergänzen','Nothing to add','Nema što dodati'],['{n} Einträge ergänzen','Add {n} entries','Dodaj {n} unosa'],['{n} Einträge ergänzt.','{n} entries added.','Dodano {n} unosa.'],['nichts Neues','nothing new','ništa novo'],
+['Verlängert sich um (Monate)','Renews by (months)','Produljuje se za (mjeseci)'],['Notiz zur Kaution','Note on deposit','Napomena uz polog'],['Notariell beglaubigt?','Notarised?','Ovjeren kod bilježnika?'],['Unbekannt','Unknown','Nepoznato'],['Rücklage pro Monat (€)','Reserve per month (€)','Pričuva mjesečno (€)'],['Aus Datei ergänzen','Add from file','Dopuni iz datoteke'],['Modernisierung','Modernisation','Modernizacija']);
+I18N.push(['Verlängert sich um','Renews by','Produljuje se za'],['{n} Monate','{n} months','{n} mjeseci'],['Fehlende Daten aus einer Datei dazunehmen, z. B. aus Excel','Add missing data from a file, e.g. from Excel','Dodaj podatke koji nedostaju iz datoteke, npr. iz Excela'],['Bitte eintragen, was gemacht wurde.','Please enter what was done.','Upiši što je napravljeno.'],['Bitte den Monat wählen.','Please choose the month.','Odaberi mjesec.'],['Bitte eine Datei auswählen.','Please choose a file.','Odaberi datoteku.'],['Die Datei kann nicht gelesen werden.','The file cannot be read.','Datoteka se ne može pročitati.']);
