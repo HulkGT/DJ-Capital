@@ -2215,6 +2215,7 @@ function mergePlan(){const d=mrg.d,mp=mrg.map,G=[];const pid=k=>mp.props[k],uidO
   const dig=s=>String(s||'').replace(/\D/g,'');
   const mt=(d.meters||[]).filter(m=>isNew(pid(m.prop))||!(S.meterDevs||[]).some(e=>e.propertyId===pid(m.prop)&&((dig(m.number)&&dig(e.number)===dig(m.number))||(m.omm&&e.omm===m.omm)||(!dig(m.number)&&!m.omm&&e.kind===m.kind&&nkey(e.place)===nkey(m.place)))));g('met','Zähler',mt,(d.meters||[]).length-mt.length);
   const pl=(d.plans||[]).filter(x=>isNew(pid(x.prop))||!(S.plans||[]).some(e=>e.propertyId===pid(x.prop)&&nkey(e.title)===nkey(x.title)));g('plan','Modernisierungsplan',pl,(d.plans||[]).length-pl.length,(S.plans||[]).length&&pl.length?'Die App hat schon einen Plan. Nur ankreuzen, wenn diese Einträge wirklich fehlen.':'');
+  const by=(d.buys||[]).filter(x=>isNew(pid(x.prop))||!((propOf(pid(x.prop))||{}).buy||[]).some(e=>+e.year===+x.year&&Math.abs((+e.price||0)-x.price)<1));g('buy','Kaufpreise',by,(d.buys||[]).length-by.length);
   const ac=[];(d.accounts||[]).forEach(ia=>{const t=mp.accs[ia.key];if(t==='skip')return;const ex=isNew(t)?null:S.accounts.find(x=>x.id===t);(ia.history||[]).forEach(h=>{if(!ex||!(ex.history||[]).some(e=>e.date===h.date))ac.push({ia,h})})});
   g('acc','Kontostände (Verlauf)',ac,(d.accounts||[]).reduce((s,x)=>s+(x.history||[]).length,0)-ac.length);
   const nt=(d.notes||[]).filter(x=>!(S.notes||[]).some(e=>nkey(e.title)===nkey(x.title)));g('note','Notizen',nt,(d.notes||[]).length-nt.length,(S.notes||[]).length&&nt.length?'Die App hat schon Notizen. Nur ankreuzen, wenn diese wirklich fehlen.':'');
@@ -2245,6 +2246,7 @@ function mergeApply(){const d=mrg.d,mp=mrg.map,G=mergePlan(),on=k=>mrg.on[k],grp
   use('dev').forEach(x=>{S.devices.push({id:uid(),unitId:mp.units[x.unit],name:x.name,year:x.year});cnt++});
   use('met').forEach(m=>{S.meterDevs.push({id:uid(),propertyId:mp.props[m.prop],kind:m.kind,number:m.number||'',place:m.place||'',omm:m.omm||'',account:m.account||'',code:m.code||'',note:m.note||'',readings:[]});cnt++});
   use('plan').forEach(x=>{S.plans.push({id:uid(),propertyId:mp.props[x.prop],title:x.title,prio:x.prio||'Mittel',year:x.year||null,est:x.est==null?null:x.est,act:null,status:x.status||'Geplant',note:x.note||''});cnt++});
+  use('buy').forEach(x=>{const p=propOf(mp.props[x.prop]);if(p){p.buy=p.buy||[];p.buy.push({year:x.year,price:x.price,what:x.what||''});cnt++}});
   use('acc').forEach(x=>{let t=mp.accs[x.ia.key];if(t==='skip')return;let acc=S.accounts.find(a=>a.id===t);if(!acc){acc={id:uid(),name:x.ia.name,type:x.ia.type||'bank',iban:'',history:[],note:''};S.accounts.push(acc);mp.accs[x.ia.key]=acc.id}acc.history=acc.history||[];if(!acc.history.some(h=>h.date===x.h.date)){acc.history.push({date:x.h.date,value:x.h.value});acc.history.sort((p,q)=>p.date.localeCompare(q.date));cnt++}});
   use('note').forEach(x=>{S.notes.push({id:uid(),title:x.title,text:x.text||''});cnt++});
   if(S.settings&&S.settings.immo===false)S.settings.immo=true;
@@ -2345,3 +2347,4 @@ function wideLayout(cur){const m=document.querySelector('main.stack');if(!m||!WI
   else if(cur==='konten')bal([...m.querySelectorAll(':scope>.group')]);
 }
 I18N.push(['Kontostände (Verlauf)','Account balances (history)','Stanja računa (povijest)'],['Nicht übernehmen','Do not import','Ne preuzimaj'],['Links steht der Name aus der Datei, rechts dein Objekt, deine Einheit oder dein Konto in der App. Bitte kurz prüfen.','On the left is the name from the file, on the right your property, unit or account in the app. Please check.','Lijevo je naziv iz datoteke, desno tvoj objekt, jedinica ili račun u aplikaciji. Molim provjeri.']);
+I18N.push(['Kaufpreise','Purchase prices','Kupovne cijene']);
