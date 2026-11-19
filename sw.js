@@ -1,0 +1,30 @@
+// DJ Capital – Offline-Speicher. Bei jedem Update die Versionsnummer erhöhen.
+const VERSION='djc-1.22.0';
+self.window=self;try{importScripts('config.js')}catch(e){}
+const SHELL=['./','index.html','app.js','style.css','manifest.webmanifest','icon-192.png','icon-512.png','icon-maskable-512.png','apple-touch-icon.png','lib/pdf.min.js','lib/pdf.worker.min.js','sc-upload.png','sc-beleg.png','sc-ausgabe.png','sc-miete.png','privacy.html','terms.html','config.js','fonts/bricolage-grotesque-latin-ext-wght-normal.woff2','fonts/bricolage-grotesque-latin-wght-normal.woff2','fonts/instrument-sans-latin-400-normal.woff2','fonts/instrument-sans-latin-500-normal.woff2','fonts/instrument-sans-latin-600-normal.woff2','fonts/instrument-sans-latin-700-normal.woff2','fonts/instrument-sans-latin-ext-400-normal.woff2','fonts/instrument-sans-latin-ext-500-normal.woff2','fonts/instrument-sans-latin-ext-600-normal.woff2','fonts/instrument-sans-latin-ext-700-normal.woff2'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==VERSION&&x!=='djc-rem').map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});
+self.addEventListener('fetch',e=>{
+  const r=e.request;if(r.method!=='GET')return;
+  const u=new URL(r.url);
+  // Bank-Vermittler und andere fremde Adressen nie zwischenspeichern
+  if(u.origin!==location.origin){if(!/^fonts\.(googleapis|gstatic)\.com$/.test(u.hostname))return;e.respondWith(caches.match(r).then(m=>m||fetch(r).then(res=>{const c=res.clone();caches.open(VERSION).then(x=>x.put(r,c));return res}).catch(()=>m)));return}
+  // eigene Dateien: erst Netz (für Updates), sonst Offline-Kopie
+  e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const c=res.clone();caches.open(VERSION).then(x=>x.put(r,c));return res}).catch(()=>caches.match(r).then(m=>m||caches.match('index.html'))));
+});
+// Mitteilungen: Der Server schickt nur ein Signal ohne Inhalt, die App holt die Rechnung dann verschlüsselt ab.
+// Erinnerungen: Der Server schickt nur ein Signal; die fälligen Texte holt der Service Worker mit der eigenen Push-Adresse ab.
+async function remDue(){
+  const srv=String(self.DJC_SERVER||'').replace(/\/+$/,'');if(!srv)return [];
+  const sub=await self.registration.pushManager.getSubscription();if(!sub)return [];
+  const r=await fetch(srv+'/push/due?ep='+encodeURIComponent(sub.endpoint),{cache:'no-store'});const j=await r.json();
+  const c=await caches.open('djc-rem');const old=await c.match('shown');const seen=old?await old.json():[];
+  const L=(j.items||[]).filter(x=>!seen.includes(x.id));await c.put('shown',new Response(JSON.stringify(seen.concat(L.map(x=>x.id)).slice(-200))));return L}
+self.addEventListener('push',e=>{e.waitUntil((async()=>{
+  let R=[];try{R=await remDue()}catch(err){}
+  if(R.length){for(const x of R)await self.registration.showNotification('Erinnerung',{body:x.title,icon:'icon-192.png',badge:'icon-192.png',tag:'djc-rem-'+x.id,silent:!x.loud,vibrate:x.loud?[300,150,300,150,300]:undefined,requireInteraction:!!x.loud,data:{url:'./#mehr/remind'}});return}
+  const L=await self.clients.matchAll({type:'window',includeUncontrolled:true});L.forEach(c=>c.postMessage({t:'bill'}));
+  await self.registration.showNotification('My Capital',{body:'Neue Rechnung eingegangen. Tippe zum Ansehen.',icon:'icon-192.png',badge:'icon-192.png',tag:'djc-bill',renotify:true,data:{url:'./#mehr/bills'}});
+})())});
+self.addEventListener('notificationclick',e=>{e.notification.close();const url=(e.notification.data&&e.notification.data.url)||'./';
+  e.waitUntil((async()=>{const L=await self.clients.matchAll({type:'window',includeUncontrolled:true});for(const c of L){if('focus' in c){await c.focus();if('navigate' in c)try{await c.navigate(url)}catch(x){}return}}if(self.clients.openWindow)await self.clients.openWindow(url)})())});
