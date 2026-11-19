@@ -577,3 +577,4 @@ details.rhelp>summary{list-style:none}details.rhelp>summary::-webkit-details-mar
 .ralert legend{padding:0 6px;font-weight:600}
 .ralert .chk{display:flex;gap:8px;align-items:flex-start}
 .hero[data-act="nettoDlg"]{cursor:pointer}
+.rempush ul{list-style:none;padding:0;margin:8px 0;display:grid;gap:4px}

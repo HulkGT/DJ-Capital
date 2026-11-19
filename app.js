@@ -2170,7 +2170,7 @@ function acctPage(){const LI=loggedIn(),st=S.settings||{},nm=st.owner||(LI?acct.
     +'<div class="form sbtn"><button data-act="copyBackup">↓ Speichern</button><button data-act="restoreDlg">↑ Einspielen</button></div>'+row('bill','c1','Aus Datei ergänzen','Fehlende Daten aus einer Datei dazunehmen, z. B. aus Excel','<span class="chev">›</span>','mergeDlg')+row('bill','c1','Doppelte suchen','Doppelte Einträge finden und löschen','<span class="chev">›</span>','dupDlg')+(mailOn()?row('cloud','c1','Gmail-Skript neu erstellen','Nur nötig, wenn das Skript bei Google verloren ging','<span class="chev">›</span>','mailReset'):'')+'</section>';
   if(LI)h+='<button class="logout" data-act="logout">Abmelden</button>';
   return h}
-function remPage(){return '<div class="h2row remtop"><span class="hint">Eigene Termine und was die App selbst erkennt.</span><button class="primary plus" data-act="addRem" aria-label="Neue Erinnerung">+</button></div>'+remRows()
+function remPage(){return '<div class="h2row remtop"><span class="hint">Eigene Termine und was die App selbst erkennt.</span><button class="primary plus" data-act="addRem" aria-label="Neue Erinnerung">+</button></div>'+remPushBox()+remRows()
   +trashHtml()+'<div class="srow solo"><span class="stx"><b>Auf der Übersicht zeigen</b></span>'+swBtn(!(S.settings&&S.settings.remind===false),'toggleRemind','Auf der Übersicht zeigen')+'</div>'}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a==='upAuszug')upChooser('auszug');else if(a==='upBeleg')upChooser('beleg');
@@ -2845,3 +2845,10 @@ let remSyncT=null;
 function remSync(force){if(!loggedIn()||!SRV)return;const items=(S.reminders||[]).filter(r=>r.alert==='loud'||r.alert==='quiet').flatMap(remNext);const h=JSON.stringify(items);
   if(!force&&localStorage.getItem('djc-remh')===h)return;clearTimeout(remSyncT);remSyncT=setTimeout(async()=>{try{await bkApi('/push/rem',{method:'POST',body:JSON.stringify({items})});localStorage.setItem('djc-remh',h)}catch(e){}},800)}
 {const _r=render;render=function(){const x=_r.apply(this,arguments);try{remSync()}catch(e){}return x}}
+
+/* 1.22.1: Status der Mitteilungen auf der Erinnerungs-Seite */
+function remPushBox(){const li=loggedIn(),perm=window.Notification?Notification.permission:'none',sub=!!localStorage.getItem('djc-push');
+  const ok=li&&perm==='granted'&&sub,row=(c,t)=>'<li class="'+(c?'pos':'neg')+'">'+(c?'✓ ':'✗ ')+t+'</li>';
+  return '<section class="card rempush"><b>Mitteilungen aufs Handy: '+(ok?'<span class="pos">eingeschaltet</span>':'<span class="neg">nicht bereit</span>')+'</b><ul>'
+    +row(li,'Angemeldet')+row(perm==='granted','Mitteilungen im Handy erlaubt'+(perm==='denied'?' (blockiert – in den Handy-Einstellungen für My Capital erlauben)':''))+row(sub,'Dieses Handy beim Server angemeldet')+'</ul>'
+    +'<div class="mact">'+(li&&!ok&&perm!=='denied'?'<button class="primary" data-act="pushOn">Einschalten</button>':'')+(ok?'<button data-act="pushTest">Test-Mitteilung senden</button>':'')+'</div><small class="hint">Version 1.22.1. Der Test zeigt „Neue Rechnung eingegangen“ – das ist nur der Test.</small></section>'}
