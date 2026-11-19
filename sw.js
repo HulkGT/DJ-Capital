@@ -1,5 +1,5 @@
 // DJ Capital – Offline-Speicher. Bei jedem Update die Versionsnummer erhöhen.
-const VERSION='djc-1.22.2';
+const VERSION='djc-1.22.3';
 self.window=self;try{importScripts('config.js')}catch(e){}
 const SHELL=['./','index.html','app.js','style.css','manifest.webmanifest','icon-192.png','icon-512.png','icon-maskable-512.png','apple-touch-icon.png','lib/pdf.min.js','lib/pdf.worker.min.js','sc-upload.png','sc-beleg.png','sc-ausgabe.png','sc-miete.png','privacy.html','terms.html','config.js','fonts/bricolage-grotesque-latin-ext-wght-normal.woff2','fonts/bricolage-grotesque-latin-wght-normal.woff2','fonts/instrument-sans-latin-400-normal.woff2','fonts/instrument-sans-latin-500-normal.woff2','fonts/instrument-sans-latin-600-normal.woff2','fonts/instrument-sans-latin-700-normal.woff2','fonts/instrument-sans-latin-ext-400-normal.woff2','fonts/instrument-sans-latin-ext-500-normal.woff2','fonts/instrument-sans-latin-ext-600-normal.woff2','fonts/instrument-sans-latin-ext-700-normal.woff2'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});

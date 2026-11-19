@@ -204,7 +204,7 @@ const propOf=id=>S.props.find(p=>p.id===id);
 const unitOf=id=>S.units.find(u=>u.id===id);
 const accOf=id=>S.accounts.find(a=>a.id===id);
 const unitLabel=u=>{const p=propOf(u.propertyId);const s=p?p.name.split(/[\s,]+/)[0]:'';return (s&&s!==u.name?s+' ':'')+u.name};
-function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,4200)}
+function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,arguments[1]||4200)}
 function modal(html){const m=$('#modal');m.innerHTML='<div class="mbox" role="dialog" aria-modal="true">'+html+'</div>';m.hidden=false;const f=m.querySelector('input:not([type=file]):not([type=checkbox]),select,textarea');if(f&&!f.readOnly&&!modal.nofocus)f.focus();modal.nofocus=false}
 function closeModal(){const m=$('#modal');m.hidden=true;m.innerHTML=''}
 let pendingFn=null;
@@ -2851,14 +2851,21 @@ function remPushBox(){const li=loggedIn(),perm=window.Notification?Notification.
   const ok=li&&perm==='granted'&&sub,row=(c,t)=>'<li class="'+(c?'pos':'neg')+'">'+(c?'✓ ':'✗ ')+t+'</li>';
   return '<section class="card rempush"><b>Mitteilungen aufs Handy: '+(ok?'<span class="pos">eingeschaltet</span>':'<span class="neg">nicht bereit</span>')+'</b><ul>'
     +row(li,'Angemeldet')+row(perm==='granted','Mitteilungen im Handy erlaubt'+(perm==='denied'?' (blockiert – in den Handy-Einstellungen für My Capital erlauben)':''))+row(sub,'Dieses Handy beim Server angemeldet')+'</ul>'
-    +'<div class="mact">'+(li&&!ok&&perm!=='denied'?'<button class="primary" data-act="pushOn">Einschalten</button>':'')+(ok?'<button data-act="pushTest">Test-Mitteilung senden</button>':'')+'</div><small class="hint">Version 1.22.2. Der Test zeigt „Neue Rechnung eingegangen“ – das ist nur der Test.</small></section>'}
+    +'<div class="mact">'+(li&&!ok&&perm!=='denied'?'<button class="primary" data-act="pushOn">Einschalten</button>':'')+(ok?'<button data-act="pushTest">Test-Mitteilung senden</button>':'')+'</div><small class="hint">Version 1.22.3. Der Test zeigt „Neue Rechnung eingegangen“ – das ist nur der Test.</small></section>'}
 
-/* 1.22.2: Handy beim Server immer wieder anmelden (die Push-Adresse kann sich ändern oder verfallen) */
-async function pushResub(){if(!loggedIn()||!('serviceWorker' in navigator)||!('PushManager' in window)||!window.Notification||Notification.permission!=='granted')return false;
-  const reg=await navigator.serviceWorker.ready;const {key}=await bkApi('/push/key');let sub=await reg.pushManager.getSubscription();
-  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uDec(key)});
-  await bkApi('/push/sub',{method:'POST',body:JSON.stringify({sub:sub.toJSON()})});localStorage.setItem('djc-push',sub.endpoint);return true}
-async function pushTest2(){try{let j=await bkApi('/push/test',{method:'POST'});
-  if(!j.sent){toast('Handy wird neu angemeldet …');await pushResub();j=await bkApi('/push/test',{method:'POST'});localStorage.removeItem('djc-remh');remSync(true)}
-  toast(j.sent?'Mitteilung ist unterwegs.':'Das Handy konnte nicht angemeldet werden. Tippe auf „Einschalten“.');if(!j.sent){localStorage.removeItem('djc-push');render()}}catch(e){toast('Der Server ist nicht erreichbar.')}}
-setTimeout(()=>{pushResub().then(ok=>{if(ok){localStorage.removeItem('djc-remh');remSync(true)}}).catch(()=>{})},4000);
+/* 1.22.3: Handy beim Server anmelden – bei Problemen mit ganz neuer Push-Adresse */
+async function pushResub(fresh){if(!loggedIn()||!('serviceWorker' in navigator)||!('PushManager' in window)||!window.Notification)throw new Error('Dieses Handy oder dieser Browser kann keine Mitteilungen.');
+  if(Notification.permission!=='granted'){const p=await Notification.requestPermission();if(p!=='granted')throw new Error('Mitteilungen sind im Handy nicht erlaubt.')}
+  let step='Schlüssel holen';try{const reg=await navigator.serviceWorker.ready;const {key}=await bkApi('/push/key');if(!key)throw new Error('kein Schlüssel vom Server');
+    let sub=await reg.pushManager.getSubscription();
+    if(sub&&fresh){step='alte Anmeldung löschen';try{await sub.unsubscribe()}catch(e){}sub=null}
+    step='beim Handy anmelden';if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uDec(key)});
+    step='beim Server speichern';await bkApi('/push/sub',{method:'POST',body:JSON.stringify({sub:sub.toJSON()})});localStorage.setItem('djc-push',sub.endpoint);return true}
+  catch(e){throw new Error(step+': '+((e&&(e.message||e.code||e.error))||String(e)))}}
+async function pushTest2(){toast('Test läuft …');try{let j=await bkApi('/push/test',{method:'POST'});
+  if(!j.sent){await pushResub(false);j=await bkApi('/push/test',{method:'POST'})}
+  if(!j.sent){await pushResub(true);j=await bkApi('/push/test',{method:'POST'})}
+  localStorage.removeItem('djc-remh');remSync(true);
+  toast(j.sent?'Mitteilung ist unterwegs.':'Server hat das Handy gespeichert, aber der Versand klappt nicht. Schick mir einen Screenshot.')}
+  catch(e){toast('Fehler bei „'+((e&&e.message)||e)+'“ – schick mir bitte einen Screenshot davon.',9000)}}
+setTimeout(()=>{if(window.Notification&&Notification.permission==='granted')pushResub(false).then(()=>{localStorage.removeItem('djc-remh');remSync(true)}).catch(()=>{})},4000);
